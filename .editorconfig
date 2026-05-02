@@ -1,0 +1,29 @@
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.cs]
+# CA2007: Consider calling ConfigureAwait on the awaited task
+# Not applicable in ASP.NET / plugin code where we want the synchronization context.
+dotnet_diagnostic.CA2007.severity = none
+
+# CA1031: Do not catch general exception types
+# Plugin shutdown / background loops must swallow to finish cleanly.
+dotnet_diagnostic.CA1031.severity = none
+
+# CA1848: Use the LoggerMessage delegates
+# Source-generated LoggerMessage is overkill for this plugin's log volume.
+dotnet_diagnostic.CA1848.severity = none
+
+# CA1062: Validate arguments of public methods - handled by nullable reference types
+dotnet_diagnostic.CA1062.severity = none
+
+[tests/**/*.cs]
+# CA1707: test methods use underscores by convention.
+dotnet_diagnostic.CA1707.severity = none

@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Restore
+        run: dotnet restore Bowire.Protocol.Akka.slnx
+
+      - name: Build & Test
+        run: |
+          dotnet build Bowire.Protocol.Akka.slnx -c Release --no-restore -p:Version=${{ steps.version.outputs.VERSION }}
+          dotnet test Bowire.Protocol.Akka.slnx -c Release --no-build -v normal
+
+      - name: Pack
+        run: dotnet pack Bowire.Protocol.Akka.slnx -c Release --no-build -o artifacts/packages -p:Version=${{ steps.version.outputs.VERSION }}
+
+      # Gated on non-RC tags so `v*-rc*` exercises the full pipeline as
+      # a dry run without permanently publishing a package version.
+      # GA tags (no `-rc` suffix) push for real.
+      - name: Publish to GitHub Packages
+        if: ${{ !contains(github.ref, '-rc') }}
+        run: dotnet nuget push "artifacts/packages/*.nupkg" --source "https://nuget.pkg.github.com/Kuestenlogik/index.json" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+
+      # nuget.org: only on real GA tags (no -rc), and only when the
+      # secret is configured. NUGET_API_KEY needs the
+      # 'Push new packages and package versions' scope with glob 'KL.*'.
+      - name: Publish to nuget.org
+        if: ${{ !contains(github.ref, '-rc') && env.NUGET_API_KEY != '' }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push "artifacts/packages/*.nupkg"             --source https://api.nuget.org/v3/index.json             --api-key "$NUGET_API_KEY"             --skip-duplicate
+          dotnet nuget push "artifacts/packages/*.snupkg"             --source https://api.nuget.org/v3/index.json             --api-key "$NUGET_API_KEY"             --skip-duplicate
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref, '-rc') }}
+          files: artifacts/packages/*.nupkg
