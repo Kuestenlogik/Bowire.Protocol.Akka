@@ -3,6 +3,7 @@
 
 using System.Threading.Channels;
 using Akka.Actor;
+using Akka.Event;
 
 namespace Kuestenlogik.Bowire.Protocol.Akka;
 
@@ -17,6 +18,13 @@ namespace Kuestenlogik.Bowire.Protocol.Akka;
 /// <see cref="ChannelReader{T}"/> that receives every tap from now on.
 /// Multiple subscribers each get their own reader — no fan-out coupling.
 /// </para>
+/// <para>
+/// The extension also subscribes to the actor system's
+/// <see cref="EventStream"/> for <see cref="DeadLetter"/> events and
+/// republishes them through the same channel with
+/// <see cref="TappedMessage.IsDeadLetter"/> set, so undeliverable messages
+/// surface in the Bowire stream without any per-actor opt-in.
+/// </para>
 /// </summary>
 /// <remarks>
 /// The tap mailbox queries this extension on every enqueue; if no
@@ -28,6 +36,8 @@ public sealed class BowireAkkaExtension : IExtension
 {
     private readonly object _lock = new();
     private readonly List<Channel<TappedMessage>> _subscribers = [];
+    private readonly IActorRef _deadLetterListener;
+    private readonly string _deadLetterPath;
 
     /// <summary>The actor system this extension instance belongs to.</summary>
     public ExtendedActorSystem System { get; }
@@ -35,6 +45,31 @@ public sealed class BowireAkkaExtension : IExtension
     internal BowireAkkaExtension(ExtendedActorSystem system)
     {
         System = system;
+        _deadLetterPath = system.DeadLetters.Path.ToString();
+
+        // Subscribe a lightweight internal actor to the EventStream for
+        // DeadLetter notifications. We use an actor (rather than a raw
+        // delegate) because Akka.NET's EventStream API is actor-based —
+        // ActorOf gives us automatic lifecycle handling.
+        _deadLetterListener = system.SystemActorOf(
+            Props.Create(() => new DeadLetterListener(this)),
+            "bowire-deadletter-listener");
+        system.EventStream.Subscribe(_deadLetterListener, typeof(DeadLetter));
+
+        // Tear down the subscription when the system shuts down so we
+        // don't leak the EventStream registration. IExtension has no
+        // dispose hook, so RegisterOnTermination is the standard knob.
+        system.RegisterOnTermination(() =>
+        {
+            try
+            {
+                System.EventStream.Unsubscribe(_deadLetterListener, typeof(DeadLetter));
+            }
+            catch
+            {
+                // Best-effort cleanup during shutdown; swallow.
+            }
+        });
     }
 
     /// <summary>
@@ -105,6 +140,60 @@ public sealed class BowireAkkaExtension : IExtension
             ch.Writer.TryWrite(msg);
         }
     }
+
+    /// <summary>
+    /// Convert a <see cref="DeadLetter"/> from the actor system's
+    /// <see cref="EventStream"/> into a <see cref="TappedMessage"/> with
+    /// <see cref="TappedMessage.IsDeadLetter"/> set, then fan-out via the
+    /// regular <see cref="Publish"/> path. Wrapped in try/catch because a
+    /// broken <see cref="object.ToString"/> on a payload must never break
+    /// the listener actor.
+    /// </summary>
+    internal void PublishDeadLetter(DeadLetter deadLetter)
+    {
+        try
+        {
+            var msg = deadLetter.Message;
+            Publish(new TappedMessage(
+                Recipient: _deadLetterPath,
+                Sender: deadLetter.Sender?.Path?.ToString() ?? string.Empty,
+                MessageType: msg?.GetType().FullName ?? "<null>",
+                Payload: msg?.ToString() ?? string.Empty,
+                Timestamp: DateTime.UtcNow,
+                IsDeadLetter: true));
+        }
+        catch
+        {
+            // Diagnostics must never crash the actor system. Swallow.
+        }
+    }
+
+#pragma warning disable CA1812 // Instantiated by Akka via Props.Create
+    /// <summary>
+    /// Tiny internal actor that bridges the <see cref="EventStream"/>'s
+    /// actor-based subscription API back into the
+    /// <see cref="BowireAkkaExtension"/>'s plain method call. Holding a
+    /// reference to the extension is fine: the extension's lifetime is the
+    /// actor system's.
+    /// </summary>
+    private sealed class DeadLetterListener : UntypedActor
+    {
+        private readonly BowireAkkaExtension _extension;
+
+        public DeadLetterListener(BowireAkkaExtension extension)
+        {
+            _extension = extension;
+        }
+
+        protected override void OnReceive(object message)
+        {
+            if (message is DeadLetter dl)
+            {
+                _extension.PublishDeadLetter(dl);
+            }
+        }
+    }
+#pragma warning restore CA1812
 }
 
 /// <summary>

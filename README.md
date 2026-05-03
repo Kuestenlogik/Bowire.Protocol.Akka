@@ -9,7 +9,8 @@ Bowire protocol plugin for **[Akka.NET](https://getakka.net/)** actor systems. S
 
 - **Mailbox tap** — a custom Akka.NET `MailboxType` (`BowireTapMailbox`) wraps the standard unbounded queue and forwards every enqueue to a per-actor-system extension. Opt-in globally (default mailbox swap) or per-actor (`Props.WithMailbox(...)`).
 - **`IExtension` integration** — `BowireAkkaExtension` owns the broadcast channel and the active subscriber list. Steady-state cost when nobody's watching: one volatile read per message.
-- **Bowire streaming pane** — `BowireAkkaProtocol` exposes one server-streaming method, `Tap/MonitorMessages`, that yields `TappedMessage` envelopes (recipient path, sender path, CLR type, payload, timestamp) as JSON.
+- **DeadLetters capture** — the extension subscribes to the actor system's `EventStream` and republishes every `Akka.Event.DeadLetter` through the same channel with `TappedMessage.IsDeadLetter = true`, so undeliverable messages surface in the Bowire stream without any per-actor opt-in.
+- **Bowire streaming pane** — `BowireAkkaProtocol` exposes one server-streaming method, `Tap/MonitorMessages`, that yields `TappedMessage` envelopes (recipient path, sender path, CLR type, payload, timestamp, dead-letter flag) as JSON.
 
 ## Install
 
@@ -66,9 +67,10 @@ dotnet run --project samples/Kuestenlogik.Bowire.Protocol.Akka.Sample
 
 ## Roadmap
 
-- **0.1.0** (current) — embedded mode, `EventStream`-style mailbox tap, JSON envelope of recipient/sender/type/payload/timestamp.
-- **0.2.0** — external `Akka.Cluster.Tools.ClusterClient` transport so the standalone `bowire` CLI can attach to a running cluster, mailbox-snapshot inspection (size, head messages), `DeadLetters` capture, per-actor throughput stats.
-- **0.3.0** — typed payload via Akka serializer roundtrip, opt-in filter API from the Bowire UI (per actor path, per message type), Tell-from-Bowire (interactive duplex).
+- **0.1.0** — embedded mode, `EventStream`-style mailbox tap, JSON envelope of recipient/sender/type/payload/timestamp.
+- **0.2.0** (current) — `DeadLetters` capture via `EventStream` subscription with `IsDeadLetter` flag on the envelope.
+- **0.3.0** — external `Akka.Cluster.Tools.ClusterClient` transport so the standalone `bowire` CLI can attach to a running cluster, mailbox-snapshot inspection (size, head messages), per-actor throughput stats.
+- **0.4.0** — typed payload via Akka serializer roundtrip, opt-in filter API from the Bowire UI (per actor path, per message type), Tell-from-Bowire (interactive duplex).
 
 ## License
 
