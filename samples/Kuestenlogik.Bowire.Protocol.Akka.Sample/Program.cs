@@ -21,8 +21,16 @@ using Kuestenlogik.Bowire.Protocol.Akka.Sample.Actors;
 //   2. Pick the "Akka.NET" protocol tab
 //   3. Stream the Tap → MonitorMessages method
 
+// Define a NAMED mailbox config (akka.actor.bowire-tap) and opt our
+// three application actors into it via Props.WithMailbox below — this
+// is the surgical opt-in pattern from the plugin README. Setting the
+// default-mailbox globally would also rewrap the system's own root
+// guardian + dead-letters mailbox during bootstrap, which loads the
+// BowireAkkaExtension before the actor system is navigable.
 const string TapHocon = """
-    akka.actor.default-mailbox.mailbox-type = "Kuestenlogik.Bowire.Protocol.Akka.BowireTapMailbox, Kuestenlogik.Bowire.Protocol.Akka"
+    akka.actor.bowire-tap = {
+        mailbox-type = "Kuestenlogik.Bowire.Protocol.Akka.BowireTapMailbox, Kuestenlogik.Bowire.Protocol.Akka"
+    }
     """;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,9 +46,11 @@ var system = app.Services.GetRequiredService<ActorSystem>();
 
 // Master gets bound to the dock after construction (forward-decl), so
 // PortCallClosed can flow back. Order: crane → master → dock → bind.
-var crane = system.ActorOf(CraneActor.Build(), "crane-A1");
-var master = system.ActorOf(HarborMasterActor.Build(), "harbor-master");
-var dock = system.ActorOf(DockActor.Build(crane, master), "dock-1");
+// Each actor opts into the BowireTapMailbox via WithMailbox so the
+// system-internal actors keep their default mailbox.
+var crane = system.ActorOf(CraneActor.Build().WithMailbox("akka.actor.bowire-tap"), "crane-A1");
+var master = system.ActorOf(HarborMasterActor.Build().WithMailbox("akka.actor.bowire-tap"), "harbor-master");
+var dock = system.ActorOf(DockActor.Build(crane, master).WithMailbox("akka.actor.bowire-tap"), "dock-1");
 master.Tell(new BindDock(dock));
 
 // Background scheduler — random ship every 2 s.

@@ -36,7 +36,7 @@ public sealed class BowireAkkaExtension : IExtension
 {
     private readonly object _lock = new();
     private readonly List<Channel<TappedMessage>> _subscribers = [];
-    private readonly IActorRef _deadLetterListener;
+    private readonly IActorRef? _deadLetterListener;
     private readonly string _deadLetterPath;
 
     /// <summary>The actor system this extension instance belongs to.</summary>
@@ -47,14 +47,33 @@ public sealed class BowireAkkaExtension : IExtension
         System = system;
         _deadLetterPath = system.DeadLetters.Path.ToString();
 
-        // Subscribe a lightweight internal actor to the EventStream for
-        // DeadLetter notifications. We use an actor (rather than a raw
-        // delegate) because Akka.NET's EventStream API is actor-based —
-        // ActorOf gives us automatic lifecycle handling.
-        _deadLetterListener = system.SystemActorOf(
-            Props.Create(() => new DeadLetterListener(this)),
-            "bowire-deadletter-listener");
-        system.EventStream.Subscribe(_deadLetterListener, typeof(DeadLetter));
+        // Spawn a private system actor that bridges the EventStream's
+        // actor-based DeadLetter notifications to PublishDeadLetter.
+        //
+        // Wrapped in try/catch: if the BowireTapMailbox is configured
+        // as the *global* default mailbox (akka.actor.default-mailbox),
+        // the mailbox is created for the root guardian during bootstrap
+        // and triggers Apply on this extension before the actor system
+        // is itself navigable. SystemActorOf NREs in that path. The
+        // surgical opt-in pattern (per-actor `Props.WithMailbox` or a
+        // named mailbox config like `akka.actor.bowire-tap`) avoids the
+        // bootstrap entanglement, but we degrade gracefully so a global
+        // default-mailbox swap still gives you the live tap stream
+        // (just without dead-letter capture).
+        try
+        {
+            _deadLetterListener = system.SystemActorOf(
+                Props.Create(() => new DeadLetterListener(this)),
+                "bowire-deadletter-listener");
+            system.EventStream.Subscribe(_deadLetterListener, typeof(DeadLetter));
+        }
+        catch
+        {
+            // System not navigable yet (root-guardian bootstrap path).
+            // Live mailbox taps still work; dead-letter capture is the
+            // only thing missing in that mode.
+            _deadLetterListener = null;
+        }
 
         // Tear down the subscription when the system shuts down so we
         // don't leak the EventStream registration. IExtension has no
@@ -63,7 +82,10 @@ public sealed class BowireAkkaExtension : IExtension
         {
             try
             {
-                System.EventStream.Unsubscribe(_deadLetterListener, typeof(DeadLetter));
+                if (_deadLetterListener is { } listener)
+                {
+                    System.EventStream.Unsubscribe(listener, typeof(DeadLetter));
+                }
             }
             catch
             {
