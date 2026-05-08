@@ -20,6 +20,10 @@
          the xunit-specific TestKit base class (Akka.TestKit.Xunit3
          doesn't exist; xunit2 base would conflict with xunit.v3). -->
     <PackageVersion Include="Akka.TestKit" Version="1.5.67" />
+    <!-- XPlat coverage collector — drives the dotnet test coverage
+         collection flag and drops one cobertura.xml per test project
+         for CI / Codecov upload. -->
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.203" />
   </ItemGroup>
 </Project>

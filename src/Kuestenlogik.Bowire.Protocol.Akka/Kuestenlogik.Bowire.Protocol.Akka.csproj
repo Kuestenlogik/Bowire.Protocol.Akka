@@ -1,9 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Bowire Akka.NET protocol plugin — taps every message landing in a `BowireTapMailbox`-wrapped actor's mailbox, plus the actor system's `DeadLetters` event stream, and surfaces them as a server-streaming method in the Bowire workbench. Watch a live actor system the same way you watch gRPC streams or MQTT topics.</Description>
+    <PackageId>Kuestenlogik.Bowire.Protocol.Akka</PackageId>
+    <PackageTags>bowire;bowire-plugin;akka;akka-net;actor-model;dead-letters;mailbox;streaming;developer-tools</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Kuestenlogik.Bowire" />
     <PackageReference Include="Akka" />
   </ItemGroup>
+
 </Project>

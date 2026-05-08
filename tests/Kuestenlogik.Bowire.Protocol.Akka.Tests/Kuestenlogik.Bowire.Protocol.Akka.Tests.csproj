@@ -13,6 +13,10 @@
     <PackageReference Include="Akka" />
     <PackageReference Include="Akka.TestKit" />
     <PackageReference Include="Kuestenlogik.Bowire" />
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Kuestenlogik.Bowire.Protocol.Akka\Kuestenlogik.Bowire.Protocol.Akka.csproj" />
