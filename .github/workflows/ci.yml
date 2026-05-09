@@ -35,4 +35,19 @@ jobs:
         run: dotnet build Bowire.Protocol.Akka.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test Bowire.Protocol.Akka.slnx -c Release --no-build -v normal
+        # XPlat Code Coverage drops one coverage.cobertura.xml per test
+        # project under artifacts/coverage/<guid>/.
+        run: >
+          dotnet test Bowire.Protocol.Akka.slnx -c Release --no-build -v normal
+          --collect:"XPlat Code Coverage"
+          --results-directory artifacts/coverage
+
+      - name: Upload coverage to Codecov
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: artifacts/coverage
+          files: '**/coverage.cobertura.xml'
+          flags: unittests
+          fail_ci_if_error: false

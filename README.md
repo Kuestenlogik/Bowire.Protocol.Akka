@@ -1,5 +1,7 @@
 # Kuestenlogik.Bowire.Protocol.Akka
 
+[![CI](https://img.shields.io/github/actions/workflow/status/Kuestenlogik/Bowire.Protocol.Akka/ci.yml?branch=main&label=CI)](https://github.com/Kuestenlogik/Bowire.Protocol.Akka/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Kuestenlogik/Bowire.Protocol.Akka/branch/main/graph/badge.svg)](https://codecov.io/gh/Kuestenlogik/Bowire.Protocol.Akka)
 [![NuGet](https://img.shields.io/nuget/v/Kuestenlogik.Bowire.Protocol.Akka)](https://www.nuget.org/packages/Kuestenlogik.Bowire.Protocol.Akka)
 [![License](https://img.shields.io/github/license/Kuestenlogik/Bowire.Protocol.Akka)](https://github.com/Kuestenlogik/Bowire.Protocol.Akka/blob/main/LICENSE)
 
