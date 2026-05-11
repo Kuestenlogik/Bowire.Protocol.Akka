@@ -38,9 +38,17 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsPackable)' != 'false'">
-    <Version>0.10.0</Version>
-    <AssemblyVersion>0.10.0</AssemblyVersion>
-    <FileVersion>0.10.0</FileVersion>
+    <!-- Version is the *floor* for local + CI-without-tag builds. The
+         release pipeline derives the real version from the git tag
+         (release.yml: `-p:Version=${VERSION}`) and that always wins
+         for the published nupkg. The "-dev" suffix on this default is
+         deliberate: any artefact built outside the tag-driven release
+         pipeline carries it. Only bump this when the next target
+         major/minor changes — per-release patch bumps happen on the
+         git tag, not here. -->
+    <Version>0.10.1-dev</Version>
+    <AssemblyVersion>0.10.1</AssemblyVersion>
+    <FileVersion>0.10.1</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('Kuestenlogik.Bowire.Protocol.'))">
