@@ -1,0 +1,46 @@
+version: 2
+
+# Dependabot config for Bowire plugin / sample repos. Smaller surface than
+# the main Bowire repo (no JS bundles, no MapLibre vendored assets) so the
+# config is correspondingly leaner: NuGet + GitHub-Actions only, grouped
+# by package family so a Bowire 1.4.x patch bump arrives as one PR instead
+# of N. The companion dependabot-auto-merge.yml squash-merges everything
+# that passes CI for patch + minor bumps; major bumps stay manual.
+
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "nuget"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      # Bundle Kuestenlogik.Bowire core + every protocol-plugin package
+      # together — they share a release cadence on the upstream Bowire
+      # repo, so getting one PR per Bowire release is the right shape.
+      bowire:
+        patterns:
+          - "Kuestenlogik.Bowire*"
+      xunit:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(actions)"
