@@ -1,6 +1,9 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Required so the floating "1.4.*" pin on Kuestenlogik.Bowire below
+         resolves under Central Package Management (NU1011 otherwise). -->
+    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
   </PropertyGroup>
   <ItemGroup>
     <!-- Bowire contract package — IBowireProtocol + the model
