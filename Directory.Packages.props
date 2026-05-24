@@ -23,7 +23,7 @@
     <!-- XPlat coverage collector — drives the dotnet test coverage
          collection flag and drops one cobertura.xml per test project
          for CI / Codecov upload. -->
-    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.300" />
   </ItemGroup>
 </Project>
