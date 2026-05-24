@@ -10,7 +10,7 @@
     <!-- Akka.NET core — IActorRef / Mailbox / Extension contracts.
          Cluster + ClusterClient land here in 0.2.0 when the external-
          transport path ships. -->
-    <PackageVersion Include="Akka" Version="1.5.67" />
+    <PackageVersion Include="Akka" Version="1.5.68" />
 
     <!-- Test-only -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
@@ -19,7 +19,7 @@
     <!-- Akka.TestKit gives us TestProbe + ExpectMsg without needing
          the xunit-specific TestKit base class (Akka.TestKit.Xunit3
          doesn't exist; xunit2 base would conflict with xunit.v3). -->
-    <PackageVersion Include="Akka.TestKit" Version="1.5.67" />
+    <PackageVersion Include="Akka.TestKit" Version="1.5.68" />
     <!-- XPlat coverage collector — drives the dotnet test coverage
          collection flag and drops one cobertura.xml per test project
          for CI / Codecov upload. -->
