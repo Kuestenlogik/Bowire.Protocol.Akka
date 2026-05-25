@@ -58,9 +58,14 @@
   <PropertyGroup>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
-    <DebugType>portable</DebugType>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- Embedded debug info: PDB ships inside the assembly itself,
+         so SourceLink + step-through debugging work without a
+         separate .snupkg. Matches the Bowire-monorepo convention and
+         sidesteps nuget.org's snupkg-validation chain (which
+         consistently rejected our snupkgs because of side-PDBs from
+         build tools like Grpc.Tools / Confluent.Kafka). -->
+    <DebugType>embedded</DebugType>
+    <IncludeSymbols>false</IncludeSymbols>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(IsPackable)' != 'false'">

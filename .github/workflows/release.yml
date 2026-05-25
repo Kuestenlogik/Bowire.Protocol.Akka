@@ -55,9 +55,10 @@ jobs:
         if: ${{ !contains(github.ref, '-rc') && env.NUGET_API_KEY != '' }}
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        # No separate .snupkg push — Directory.Build.props uses
+        # DebugType=embedded so debug info ships inside the .nupkg.
         run: |
           dotnet nuget push "artifacts/packages/*.nupkg"             --source https://api.nuget.org/v3/index.json             --api-key "$NUGET_API_KEY"             --skip-duplicate
-          dotnet nuget push "artifacts/packages/*.snupkg"             --source https://api.nuget.org/v3/index.json             --api-key "$NUGET_API_KEY"             --skip-duplicate
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
