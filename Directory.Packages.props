@@ -10,7 +10,7 @@
     <!-- Akka.NET core — IActorRef / Mailbox / Extension contracts.
          Cluster + ClusterClient land here in 0.2.0 when the external-
          transport path ships. -->
-    <PackageVersion Include="Akka" Version="1.5.68" />
+    <PackageVersion Include="Akka" Version="1.5.69" />
 
     <!-- Test-only -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
