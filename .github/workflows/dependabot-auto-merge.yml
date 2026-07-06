@@ -6,7 +6,7 @@
 # have to poll ourselves — if CI fails, the merge silently does NOT
 # happen and the PR stays open for a human to look at.
 #
-# Squash strategy + delete-branch keeps main's history linear and the
+# Rebase strategy + delete-branch keeps main's history linear and the
 # branch list lean (the Dependabot temp branch otherwise lingers until
 # someone clicks "Delete branch" in the UI).
 #
@@ -34,7 +34,7 @@ jobs:
       - name: Queue auto-merge for patch + minor bumps
         if: ${{ steps.meta.outputs.update-type == 'version-update:semver-patch'
              || steps.meta.outputs.update-type == 'version-update:semver-minor' }}
-        run: gh pr merge --auto --squash --delete-branch "$PR_URL"
+        run: gh pr merge --auto --rebase --delete-branch "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
