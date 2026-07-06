@@ -9,9 +9,11 @@ namespace Kuestenlogik.Bowire.Protocol.Akka;
 
 /// <summary>
 /// Akka.NET extension that owns the per-actor-system tap state for the
-/// Bowire workbench: an unbounded broadcast channel that
-/// <see cref="BowireTapMailbox"/> writes every tapped enqueue into, plus
-/// a small filter set that decides which messages are worth forwarding.
+/// Bowire workbench: the list of active subscriber channels that
+/// <see cref="BowireTapMailbox"/> fans every tapped enqueue out to — each
+/// a bounded, drop-oldest channel so a slow reader can't stall the actor
+/// system — plus a dead-letter bridge that republishes the system's
+/// undeliverable messages through the same fan-out.
 /// <para>
 /// Subscribers (the Bowire UI's <see cref="BowireAkkaProtocol.InvokeStreamAsync"/>
 /// implementation) call <see cref="Subscribe"/> to get a fresh

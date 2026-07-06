@@ -54,8 +54,9 @@ public sealed class BowireDeadLetterTests
     [Fact]
     public void RegularTappedMessage_HasIsDeadLetterFalseByDefault()
     {
-        // Backwards-compatibility check — the new optional parameter
-        // defaults to false so callers from before 0.2.0 keep working.
+        // Backwards-compatibility check — the optional parameter defaults
+        // to false so callers from before the IsDeadLetter flag (1.0.1)
+        // keep working.
         var msg = new TappedMessage(
             Recipient: "akka://test/user/foo",
             Sender: "akka://test/user/bar",

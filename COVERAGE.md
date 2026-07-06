@@ -8,8 +8,8 @@ What this plugin covers from the Akka.NET surface, and what it deliberately does
 |--------|---------|:-:|-------|
 | **Mailbox enqueue** | `BowireTapMailbox` → `BowireTapMessageQueue` | ✅ | Custom `MailboxType` wraps the standard unbounded queue. Every `Enqueue` forwards a `TappedMessage` to the per-`ActorSystem` extension. |
 | **DeadLetters** | `BowireAkkaExtension/DeadLetterListener` | ✅ | Subscribes to the system's `EventStream`, republishes every `Akka.Event.DeadLetter` as a `TappedMessage` with `IsDeadLetter = true`. |
-| Cluster gossip / membership | `Akka.Cluster.Tools.ClusterClient` | ⏳ | Parked on the 0.2.0 plugin roadmap. |
-| Persistence write / recovery events | journal hooks | ⏳ | Same — 0.2.0+. |
+| Cluster gossip / membership | `Akka.Cluster.Tools.ClusterClient` | ⏳ | Parked on the 1.1.0 plugin roadmap. |
+| Persistence write / recovery events | journal hooks | ⏳ | Same — 1.1.0+. |
 | ActorSystem lifecycle (start, terminate) | `EventStream` `Terminated` | ⏳ | Optional addition once the cluster track lands. |
 
 ## Opt-in modes
@@ -60,4 +60,4 @@ Latest snapshot (xunit.v3 + Akka.TestKit, 8 tests):
 | `BowireAkkaProtocol` | 77 % | 75 % |
 | **Package total** | **87 %** | **62 %** |
 
-The branch gap is the optional-subscriber paths — branches that fire only when 0 / 1 / many subscribers are attached at the moment of an enqueue, which the steady-state test suite doesn't multiplex against. Lifting them needs an integration-style test that spins up two `InvokeStreamAsync` consumers in parallel; on the 0.2.0 list.
+The branch gap is the optional-subscriber paths — branches that fire only when 0 / 1 / many subscribers are attached at the moment of an enqueue, which the steady-state test suite doesn't multiplex against. Lifting them needs an integration-style test that spins up two `InvokeStreamAsync` consumers in parallel; on the 1.1.0 list.

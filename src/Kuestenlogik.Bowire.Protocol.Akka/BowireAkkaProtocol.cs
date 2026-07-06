@@ -14,10 +14,10 @@ namespace Kuestenlogik.Bowire.Protocol.Akka;
 /// streaming subscription to every message that lands in a tap-mailboxed
 /// actor's mailbox (see <see cref="BowireTapMailbox"/>).
 /// <para>
-/// MVP scope (0.1.0): embedded mode only — the plugin grabs the host
-/// app's <see cref="ActorSystem"/> from DI and reads from
+/// Current scope (1.0.x): embedded mode only — the plugin grabs the
+/// host app's <see cref="ActorSystem"/> from DI and reads from
 /// <see cref="BowireAkkaExtension"/>. Standalone CLI via
-/// Akka.Cluster.ClusterClient lands in 0.2.0.
+/// Akka.Cluster.Tools.ClusterClient is planned for 1.1.0.
 /// </para>
 /// </summary>
 public sealed class BowireAkkaProtocol : IBowireProtocol
@@ -48,7 +48,7 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
     {
         // Embedded mode — pick up the host app's ActorSystem. Standalone
         // mode (no DI) leaves _system null and the methods below return
-        // empty results until 0.2.0 wires the ClusterClient transport.
+        // empty results until 1.1.0 wires the ClusterClient transport.
         _system = serviceProvider?.GetService(typeof(ActorSystem)) as ActorSystem;
     }
 
