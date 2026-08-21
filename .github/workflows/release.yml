@@ -36,7 +36,7 @@ jobs:
       - name: Build & Test
         run: |
           dotnet build Bowire.Protocol.Akka.slnx -c Release --no-restore -p:Version=${{ steps.version.outputs.VERSION }}
-          dotnet test Bowire.Protocol.Akka.slnx -c Release --no-build -v normal
+          dotnet test --solution Bowire.Protocol.Akka.slnx -c Release --no-build
 
       - name: Pack
         run: dotnet pack Bowire.Protocol.Akka.slnx -c Release --no-build -o artifacts/packages -p:Version=${{ steps.version.outputs.VERSION }}
