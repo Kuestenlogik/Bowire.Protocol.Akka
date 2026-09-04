@@ -5,7 +5,7 @@
   <ItemGroup>
     <!-- Bowire contract package — IBowireProtocol + the model
          types used by DiscoverAsync / InvokeAsync return values. -->
-    <PackageVersion Include="Kuestenlogik.Bowire" Version="2.6.0" />
+    <PackageVersion Include="Kuestenlogik.Bowire" Version="2.6.1" />
 
     <!-- Akka.NET core — IActorRef / Mailbox / Extension contracts.
          Cluster + ClusterClient land here in 0.2.0 when the external-
