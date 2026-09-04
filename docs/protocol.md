@@ -4,16 +4,17 @@ summary: 'The Akka.NET plugin streams every message landing in a tap-mailboxed a
 ---
 
 <!--
-  This page is this repository's contribution to https://bowire.io.
+  This file is the source of truth for this plugin's page on https://bowire.io.
 
-  Bowire's docs build fetches it into docs/protocols/akka.md and links it
-  from the protocols navigation automatically — do not add a copy to the
-  Bowire repository, it would be overwritten on the next build.
+  Bowire's docs build fetches it into its own docs/protocols/akka.md and
+  links it from the protocols navigation. Bowire keeps the fetched result
+  committed so its site still builds when this repository is unreachable —
+  that copy is overwritten on every build, so edit this file, never that one.
 
-  It moved here because the behaviour it describes lives here: while the page
-  sat in the Bowire repository, a claim about this plugin and the code making
-  it true could only be fixed in two separate commits, and for one setting
-  they drifted for weeks.
+  The page lives here because the behaviour it describes lives here. While it
+  sat in the Bowire repository, a claim and the code making it true could only
+  be fixed in two separate commits, and for at least one setting they drifted
+  for weeks.
 -->
 
 # Akka.NET
