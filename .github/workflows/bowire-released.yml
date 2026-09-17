@@ -270,23 +270,9 @@ jobs:
                   cur = L[i]
                   sub(/^.*"defaultValue"[ \t]*:[ \t]*"/, "", cur)
                   sub(/".*$/, "", cur)
-                  repl = ""
-                  # A concrete pin is replaced wholesale.
-                  if (cur ~ /^[0-9][A-Za-z0-9.+-]*$/) repl = newv
-                  # A minor-line range follows the release's line and
-                  # keeps floating across its patches: 2.7.* -> 2.8.* on
-                  # 2.8.0, untouched on 2.7.3. Anything wider (2.*) or
-                  # bracketed ([2.0,3.0)) is the operator saying how far
-                  # they are willing to float, which is not ours to
-                  # narrow.
-                  else if (cur ~ /^[0-9]+\.[0-9]+\.\*$/) {
-                    split(newv, nv, ".")
-                    split(cur, cv, ".")
-                    if (nv[1] != cv[1] || nv[2] != cv[2]) repl = nv[1] "." nv[2] ".*"
-                  }
-                  if (repl != "")
+                  if (cur ~ /^[0-9][A-Za-z0-9.+-]*$/)
                     sub(/"defaultValue"[ \t]*:[ \t]*"[^"]*"/,
-                        "\"defaultValue\": \"" repl "\"", L[i])
+                        "\"defaultValue\": \"" newv "\"", L[i])
                   break
                 }
               }
