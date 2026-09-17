@@ -146,8 +146,12 @@ jobs:
           # expected`. Nothing counts per file any more, so the noise is
           # gone by construction rather than patched.
           #
-          # `Version="[0-9][^"]*` is deliberate, not cosmetic: it only
-          # rewrites values that already look like a version number.
+          # `Version="[0-9][^"*]*` is deliberate, not cosmetic: it only
+          # rewrites values that already look like a concrete version
+          # number. The excluded `*` matters as much as the leading
+          # digit -- a range like `2.7.*` starts with one, and flattening
+          # it to a pin would silently undo an operator's decision to
+          # float.
           # Bowire.Templates ships
           #   <PackageVersion Include="Kuestenlogik.Bowire" Version="MY_BOWIRE_VERSION" />
           # as a `dotnet new` parameter (see its template.json
@@ -178,7 +182,7 @@ jobs:
           sed_program=$(mktemp)
           for id in $(printf '%s' "$PKG_IDS" | tr ',' '\n'); do
             esc=$(printf '%s' "$id" | sed 's/[.]/\\./g')
-            printf '/<Package(Version|Reference)[^>]*Include="%s"/ s|Version="[0-9][^"]*"|Version="%s"|g\n' \
+            printf '/<Package(Version|Reference)[^>]*Include="%s"/ s|Version="[0-9][^"*]*"|Version="%s"|g\n' \
               "$esc" "$NEW_V" >> "$sed_program"
           done
           while IFS= read -r -d '' f; do
@@ -266,9 +270,23 @@ jobs:
                   cur = L[i]
                   sub(/^.*"defaultValue"[ \t]*:[ \t]*"/, "", cur)
                   sub(/".*$/, "", cur)
-                  if (cur ~ /^[0-9][A-Za-z0-9.+-]*$/)
+                  repl = ""
+                  # A concrete pin is replaced wholesale.
+                  if (cur ~ /^[0-9][A-Za-z0-9.+-]*$/) repl = newv
+                  # A minor-line range follows the release's line and
+                  # keeps floating across its patches: 2.7.* -> 2.8.* on
+                  # 2.8.0, untouched on 2.7.3. Anything wider (2.*) or
+                  # bracketed ([2.0,3.0)) is the operator saying how far
+                  # they are willing to float, which is not ours to
+                  # narrow.
+                  else if (cur ~ /^[0-9]+\.[0-9]+\.\*$/) {
+                    split(newv, nv, ".")
+                    split(cur, cv, ".")
+                    if (nv[1] != cv[1] || nv[2] != cv[2]) repl = nv[1] "." nv[2] ".*"
+                  }
+                  if (repl != "")
                     sub(/"defaultValue"[ \t]*:[ \t]*"[^"]*"/,
-                        "\"defaultValue\": \"" newv "\"", L[i])
+                        "\"defaultValue\": \"" repl "\"", L[i])
                   break
                 }
               }
