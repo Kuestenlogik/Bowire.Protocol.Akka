@@ -28,14 +28,21 @@ jobs:
 
       - name: Extract version
         id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          # AssemblyVersion and FileVersion have to be numeric, so an
+          # `-rc.N` tag contributes only the part before the dash. The
+          # package keeps the full version; only the stamped assembly
+          # drops the pre-release label.
+          echo "ASSEMBLY_VERSION=${VERSION%%-*}" >> $GITHUB_OUTPUT
 
       - name: Restore
         run: dotnet restore Bowire.Protocol.Akka.slnx
 
       - name: Build & Test
         run: |
-          dotnet build Bowire.Protocol.Akka.slnx -c Release --no-restore -p:Version=${{ steps.version.outputs.VERSION }}
+          dotnet build Bowire.Protocol.Akka.slnx -c Release --no-restore -p:Version=${{ steps.version.outputs.VERSION }} -p:AssemblyVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }} -p:FileVersion=${{ steps.version.outputs.ASSEMBLY_VERSION }}
           dotnet test --solution Bowire.Protocol.Akka.slnx -c Release --no-build
 
       - name: Pack
