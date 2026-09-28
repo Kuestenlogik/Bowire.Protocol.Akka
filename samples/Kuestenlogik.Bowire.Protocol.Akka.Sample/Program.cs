@@ -23,10 +23,10 @@ using Kuestenlogik.Bowire.Protocol.Akka.Sample.Actors;
 
 // Wire BowireTapMailbox as the global default — every actor created
 // after this lands in the Bowire stream automatically, including
-// system-internal actors (root guardian, dead-letters). The plugin's
-// extension ctor wraps its DeadLetterListener spawn in try/catch so
-// the bootstrap entanglement is harmless: live mailbox taps still
-// work end-to-end, only DeadLetter capture goes silent in this mode.
+// system-internal actors. Dead letters reach the same stream: the
+// plugin creates its dead-letter bridge when the first Bowire client
+// subscribes, after the actor system is up, rather than during its
+// bootstrap (where the global mode made it fail before #33).
 const string TapHocon = """
     akka.actor.default-mailbox.mailbox-type = "Kuestenlogik.Bowire.Protocol.Akka.BowireTapMailbox, Kuestenlogik.Bowire.Protocol.Akka"
     """;

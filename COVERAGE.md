@@ -17,19 +17,23 @@ What this plugin covers from the Akka.NET surface, and what it deliberately does
 | Mode | Wiring | Tested |
 |------|--------|:-:|
 | **Per-actor mailbox** | `Props.WithMailbox("akka.actor.bowire-tap")` + HOCON config block | ✅ |
-| **Global default mailbox** | `akka.actor.default-mailbox.mailbox-type = "...BowireTapMailbox..."` | ✅ |
-| **Mixed** (default tap + actor-specific override) | Both wirings active simultaneously | ⏳ Single-mode tests only — intentional, the modes are independent. |
+| **Global default mailbox** | `akka.actor.default-mailbox.mailbox-type = "...BowireTapMailbox..."` | ✅ taps and dead letters (`BowireTapModesTests`) |
+| **Mixed** (default tap + actor-specific override) | Both wirings active simultaneously | ✅ each message exactly once (`BowireTapModesTests`) |
+
+Until #33 / #36 the global-default row was ticked while every mailbox test used `Props.WithMailbox` — and that untested mode was the one in which dead-letter capture was silently off.
 
 ## Tap envelope (`TappedMessage`)
 
 | Field | Source | Tested |
 |-------|--------|:-:|
-| `RecipientPath` | `IActorRef.Path` of the receiving actor | ✅ |
-| `SenderPath` | `IActorRef.Path` of the sender (or `Sender == null` → empty) | ✅ |
+| `Recipient` | `IActorRef.Path` of the receiving actor, as a string; `…/deadLetters` for a dead letter | ✅ |
+| `Sender` | `IActorRef.Path` of the sender, as a string; `<deadLetters>` when there is no sender | ✅ |
 | `MessageType` | CLR type name (FQN) of the message | ✅ |
-| `Payload` | JSON-serialised view of the message | ✅ |
-| `Timestamp` | UTC `DateTimeOffset` at enqueue (or `EventStream` raise for DeadLetters) | ✅ |
+| `Payload` | the message's `ToString()` — a string, not a JSON object | ✅ |
+| `Timestamp` | UTC `DateTime` at enqueue (or when the `DeadLetter` was republished) | ✅ |
 | `IsDeadLetter` | `true` for `EventStream`-republished `DeadLetter`s, else `false` | ✅ |
+
+The stream serialises this record with `System.Text.Json` defaults, so the keys on the wire are exactly these names, PascalCase.
 
 ## Plugin contract — `IBowireProtocol`
 

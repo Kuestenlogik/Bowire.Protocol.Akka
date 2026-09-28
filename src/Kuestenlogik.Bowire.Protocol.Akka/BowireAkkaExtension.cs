@@ -38,7 +38,12 @@ public sealed class BowireAkkaExtension : IExtension
 {
     private readonly object _lock = new();
     private readonly List<Channel<TappedMessage>> _subscribers = [];
-    private readonly IActorRef? _deadLetterListener;
+    // Created on the first Subscribe, not here — see EnsureDeadLetterBridge.
+    // Its own lock: creating an actor while holding _lock, which every tapped
+    // enqueue takes, is one scheduling decision away from a deadlock in the
+    // global-default mode, where the new actor's mailbox is a tap as well.
+    private readonly object _bridgeLock = new();
+    private IActorRef? _deadLetterListener;
     private readonly string _deadLetterPath;
 
     /// <summary>The actor system this extension instance belongs to.</summary>
@@ -49,33 +54,13 @@ public sealed class BowireAkkaExtension : IExtension
         System = system;
         _deadLetterPath = system.DeadLetters.Path.ToString();
 
-        // Spawn a private system actor that bridges the EventStream's
-        // actor-based DeadLetter notifications to PublishDeadLetter.
-        //
-        // Wrapped in try/catch: if the BowireTapMailbox is configured
-        // as the *global* default mailbox (akka.actor.default-mailbox),
-        // the mailbox is created for the root guardian during bootstrap
-        // and triggers Apply on this extension before the actor system
-        // is itself navigable. SystemActorOf NREs in that path. The
-        // surgical opt-in pattern (per-actor `Props.WithMailbox` or a
-        // named mailbox config like `akka.actor.bowire-tap`) avoids the
-        // bootstrap entanglement, but we degrade gracefully so a global
-        // default-mailbox swap still gives you the live tap stream
-        // (just without dead-letter capture).
-        try
-        {
-            _deadLetterListener = system.SystemActorOf(
-                Props.Create(() => new DeadLetterListener(this)),
-                "bowire-deadletter-listener");
-            system.EventStream.Subscribe(_deadLetterListener, typeof(DeadLetter));
-        }
-        catch
-        {
-            // System not navigable yet (root-guardian bootstrap path).
-            // Live mailbox taps still work; dead-letter capture is the
-            // only thing missing in that mode.
-            _deadLetterListener = null;
-        }
+        // The dead-letter bridge is NOT spawned here (#33). With the tap as
+        // the *global* default mailbox this constructor runs while the root
+        // guardian's own mailbox is being built — before the system can host
+        // an actor — and the spawn threw. A catch-all hid it, and dead-letter
+        // capture was silently off in exactly that mode. The bridge is only
+        // needed once somebody is watching (Publish drops everything with no
+        // subscriber), and by the time somebody subscribes the system is up.
 
         // Tear down the subscription when the system shuts down so we
         // don't leak the EventStream registration. IExtension has no
@@ -130,8 +115,41 @@ public sealed class BowireAkkaExtension : IExtension
         {
             _subscribers.Add(ch);
         }
+        EnsureDeadLetterBridge();
         token = ch;
         return ch.Reader;
+    }
+
+    /// <summary>
+    /// Spawn the dead-letter listener and subscribe it to the
+    /// <see cref="EventStream"/>, once, on the first subscriber (#33).
+    /// </summary>
+    /// <remarks>
+    /// A failure is logged through the actor system's own log rather than
+    /// swallowed: the old catch-all is how dead-letter capture came to be off
+    /// without anybody being told. It is retried on the next subscribe, so a
+    /// transient failure does not disable capture for the life of the system.
+    /// </remarks>
+    private void EnsureDeadLetterBridge()
+    {
+        lock (_bridgeLock)
+        {
+            if (_deadLetterListener is not null) return;
+            try
+            {
+                var listener = System.SystemActorOf(
+                    Props.Create(() => new DeadLetterListener(this)),
+                    "bowire-deadletter-listener");
+                System.EventStream.Subscribe(listener, typeof(DeadLetter));
+                _deadLetterListener = listener;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                System.Log.Warning(
+                    "Bowire: dead-letter capture is not available ({0}: {1}); live mailbox taps are unaffected.",
+                    ex.GetType().Name, ex.Message);
+            }
+        }
     }
 
     /// <summary>Tear-down counterpart to <see cref="Subscribe"/>.</summary>
@@ -180,7 +198,9 @@ public sealed class BowireAkkaExtension : IExtension
             var msg = deadLetter.Message;
             Publish(new TappedMessage(
                 Recipient: _deadLetterPath,
-                Sender: deadLetter.Sender?.Path?.ToString() ?? string.Empty,
+                // Same marker the mailbox tap uses for "no sender" (#34), so the
+                // two producers of one stream say the same thing.
+                Sender: deadLetter.Sender?.Path?.ToString() ?? "<deadLetters>",
                 MessageType: msg?.GetType().FullName ?? "<null>",
                 Payload: msg?.ToString() ?? string.Empty,
                 Timestamp: DateTime.UtcNow,

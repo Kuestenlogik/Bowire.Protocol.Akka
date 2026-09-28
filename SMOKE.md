@@ -54,20 +54,24 @@ You should see a continuous stream of frames like:
 
 ```json
 {
-  "RecipientPath": "akka://Harbor/user/harbor-master",
-  "SenderPath": "akka://Harbor/user/dock-1",
+  "Recipient": "akka://Harbor/user/harbor-master",
+  "Sender": "akka://Harbor/user/dock-1",
   "MessageType": "Kuestenlogik.Bowire.Protocol.Akka.Sample.Actors.PortCallClosed",
-  "Payload": { "PortCallId": 17, "DockId": 1 },
-  "Timestamp": "2026-05-08T19:42:13.1234567+00:00",
+  "Payload": "PortCallClosed { ShipId = 17, TotalDuration = 00:00:04.1230000 }",
+  "Timestamp": "2026-05-08T19:42:13.1234567Z",
   "IsDeadLetter": false
 }
 ```
+
+`Payload` is the message's `ToString()` — a string, not a JSON object. For a C# record that reads like the record's fields; for a class without an override it is just the type name. A typed payload is tracked separately.
 
 If you stop and immediately restart the streaming method, the new subscription picks up the next-emitted message — the broadcast channel discards messages emitted while no subscriber was attached, so the stream stays bounded.
 
 ### 5. Smoke test — DeadLetters
 
-To verify the `DeadLetters` path: stop the sample, start it again with the global tap mailbox **disabled** (comment out the `TapHocon` and use `WithMailbox` per-actor instead). With the global default off, system-internal actors enqueue to the regular mailbox, so any message sent to a stopped or non-existent path lands on the `EventStream` as a `DeadLetter`. The plugin's `DeadLetterListener` republishes those with `"IsDeadLetter": true` — visible alongside the live mailbox messages in the same stream.
+Dead letters show up in the same stream, with `"IsDeadLetter": true` and `akka://Harbor/deadLetters` as the recipient — in the sample's global-default wiring too. Any message sent to a stopped or non-existent actor lands on the `EventStream` as a `DeadLetter`, and the plugin's listener republishes it.
+
+(Before #33 this step asked you to switch the sample to per-actor wiring first: the global default mode silently dropped dead-letter capture. It no longer does.)
 
 ### 6. Tear down
 

@@ -52,7 +52,7 @@ builder.Services.AddBowire(); // discovers this plugin automatically
 
 ### 2. Opt actors into the tap mailbox
 
-**Per actor** — surgical, and keeps dead-letter capture working:
+**Per actor** — surgical, only the actors you name are tapped:
 
 ```hocon
 akka.actor.bowire-tap = {
@@ -72,7 +72,7 @@ var orders = system.ActorOf(
 akka.actor.default-mailbox.mailbox-type = "Kuestenlogik.Bowire.Protocol.Akka.BowireTapMailbox, Kuestenlogik.Bowire.Protocol.Akka"
 ```
 
-> **Note** — as the *global* default mailbox, `BowireTapMailbox` is created for the root guardian during bootstrap, before the actor system is navigable. The extension degrades gracefully there: live mailbox taps work end-to-end, but **dead-letter capture is silently disabled**. Use the per-actor (or a named-mailbox) opt-in if you need dead letters in the stream.
+Both modes capture dead letters, and they can be combined — an actor that asks for the named tap mailbox explicitly is tapped once, not twice. The dead-letter bridge is created when the first Bowire client subscribes, so it never runs into the actor system's own bootstrap (up to 1.0.21 it was spawned at bootstrap, which the global mode made fail — dead letters were silently missing there). Should creating it ever fail, the actor system's log says so and the next subscriber tries again.
 
 ### 3. Watch in Bowire
 
