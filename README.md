@@ -13,7 +13,7 @@ Bowire protocol plugin for **[Akka.NET](https://getakka.net/)** actor systems. S
 - **Mailbox tap** — a custom Akka.NET `MailboxType` (`BowireTapMailbox`) wraps the standard unbounded queue and forwards every enqueue to a per-actor-system extension. Opt in globally (default-mailbox swap) or per actor (`Props.WithMailbox(...)`).
 - **DeadLetters capture** — the extension subscribes to the actor system's `EventStream` and republishes every `Akka.Event.DeadLetter` through the same channel with `IsDeadLetter = true`, so undeliverable messages surface without any per-actor opt-in.
 - **`IExtension` integration** — `BowireAkkaExtension` owns the active subscriber list and the dead-letter bridge. When nobody is watching, each enqueue costs a single subscriber-count check; the message is only marshalled once at least one subscriber is attached.
-- **Bowire streaming pane** — `BowireAkkaProtocol` exposes one server-streaming method, `Tap/MonitorMessages`, that yields `TappedMessage` envelopes as JSON.
+- **Bowire streaming pane** — `BowireAkkaProtocol` exposes two server-streaming methods: `Tap/MonitorMessages` yields `TappedMessage` envelopes as JSON, `Tap/Throughput` messages per second per actor.
 
 ## How it works
 
@@ -77,6 +77,29 @@ Both modes capture dead letters, and they can be combined — an actor that asks
 ### 3. Watch in Bowire
 
 Open the Bowire workbench (`/bowire` in embedded mode, or the `bowire` CLI), pick the **Akka.NET** tab, and stream `Tap/MonitorMessages`. Every message landing in a tapped mailbox — and every dead letter — appears in real time.
+
+### Throughput per actor
+
+`Tap/Throughput` sends a snapshot every interval: the actors that received messages in it, busiest first, each with its count, messages per second and a running total since the stream was opened. The request body is optional:
+
+```json
+{ "intervalMs": 1000, "top": 50 }
+```
+
+`intervalMs` is clamped to 100–60000; `top: 0` lists every actor. A snapshot looks like:
+
+```json
+{
+  "Timestamp": "2026-09-28T20:30:01.004Z",
+  "IntervalSeconds": 1.002,
+  "Actors": [
+    { "Path": "akka://Harbor/user/harbor-master", "Messages": 412, "PerSecond": 411.2, "Total": 3950 },
+    { "Path": "akka://Harbor/user/dock-1", "Messages": 37, "PerSecond": 36.9, "Total": 402 }
+  ]
+}
+```
+
+The counts are taken where the tap sees the message, not from the message stream: that stream drops the oldest entries when its reader falls behind, and a figure read off it would be lowest exactly when an actor is busiest. Dead letters count under the dead-letter path. As with the message stream, nothing is counted while nobody watches.
 
 ## The envelope
 

@@ -38,6 +38,7 @@ public sealed class BowireAkkaExtension : IExtension
 {
     private readonly object _lock = new();
     private readonly List<Channel<TappedMessage>> _subscribers = [];
+    private readonly List<ThroughputCounter> _counters = [];
     // Created on the first Subscribe, not here — see EnsureDeadLetterBridge.
     // Its own lock: creating an actor while holding _lock, which every tapped
     // enqueue takes, is one scheduling decision away from a deadlock in the
@@ -82,9 +83,9 @@ public sealed class BowireAkkaExtension : IExtension
     }
 
     /// <summary>
-    /// True when at least one Bowire subscriber is listening. Read by the
-    /// tap mailbox on every enqueue to short-circuit the marshalling path
-    /// when nobody's watching.
+    /// True when at least one Bowire subscriber is listening — to the
+    /// messages or to the throughput. Read by the tap mailbox on every
+    /// enqueue to short-circuit the marshalling path when nobody's watching.
     /// </summary>
     public bool HasSubscribers
     {
@@ -92,8 +93,35 @@ public sealed class BowireAkkaExtension : IExtension
         {
             lock (_lock)
             {
-                return _subscribers.Count > 0;
+                return _subscribers.Count > 0 || _counters.Count > 0;
             }
+        }
+    }
+
+    /// <summary>
+    /// Start counting messages per actor path (#29). The counter sees every
+    /// tapped enqueue and every dead letter from now on; pass it to
+    /// <see cref="StopCounting"/> when done.
+    /// </summary>
+    public ThroughputCounter StartCounting()
+    {
+        var counter = new ThroughputCounter();
+        lock (_lock)
+        {
+            _counters.Add(counter);
+        }
+        // Dead letters count too, under the dead-letter path — the bridge is
+        // what reports them, so it has to exist for a counter as for a reader.
+        EnsureDeadLetterBridge();
+        return counter;
+    }
+
+    /// <summary>Tear-down counterpart to <see cref="StartCounting"/>.</summary>
+    public void StopCounting(ThroughputCounter counter)
+    {
+        lock (_lock)
+        {
+            _counters.Remove(counter);
         }
     }
 
@@ -172,10 +200,18 @@ public sealed class BowireAkkaExtension : IExtension
     {
         // Snapshot under lock; write outside to keep the hot path short.
         Channel<TappedMessage>[] snapshot;
+        ThroughputCounter[] counters;
         lock (_lock)
         {
-            if (_subscribers.Count == 0) return;
-            snapshot = _subscribers.ToArray();
+            if (_subscribers.Count == 0 && _counters.Count == 0) return;
+            snapshot = _subscribers.Count == 0 ? [] : _subscribers.ToArray();
+            counters = _counters.Count == 0 ? [] : _counters.ToArray();
+        }
+        // Counted before the channels, which may drop: the throughput is what
+        // the tap saw, not what a reader managed to keep up with.
+        foreach (var counter in counters)
+        {
+            counter.Record(msg.Recipient);
         }
         foreach (var ch in snapshot)
         {

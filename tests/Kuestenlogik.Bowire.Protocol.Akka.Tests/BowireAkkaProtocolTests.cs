@@ -42,7 +42,7 @@ public sealed class BowireAkkaProtocolTests
 
         var tap = Assert.Single(services);
         Assert.Equal(BowireAkkaProtocol.TapServiceName, tap.Name);
-        var monitor = Assert.Single(tap.Methods);
+        var monitor = Assert.Single(tap.Methods, m => m.Name == BowireAkkaProtocol.MonitorMethodName);
         Assert.Equal(BowireAkkaProtocol.MonitorMethodName, monitor.Name);
         Assert.True(monitor.ServerStreaming);
     }

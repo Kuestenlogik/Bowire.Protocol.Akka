@@ -39,8 +39,9 @@ The stream serialises this record with `System.Text.Json` defaults, so the keys 
 
 | Method | Behaviour | Tested |
 |--------|-----------|:-:|
-| `DiscoverAsync` | Returns one synthetic service `Tap` with one method `MonitorMessages` (server-streaming). No live ActorSystem needed at discover time. | ✅ |
-| `InvokeStreamAsync` | Hooks the `BowireAkkaExtension`'s broadcast channel and yields each `TappedMessage` as JSON until cancellation. Multi-subscriber safe. | ✅ |
+| `DiscoverAsync` | Returns one synthetic service `Tap` with two server-streaming methods, `MonitorMessages` and `Throughput`. | ✅ |
+| `InvokeStreamAsync` — `MonitorMessages` | Hooks the `BowireAkkaExtension`'s broadcast channel and yields each `TappedMessage` as JSON until cancellation. Multi-subscriber safe. | ✅ |
+| `InvokeStreamAsync` — `Throughput` | A `ThroughputSnapshot` per interval: messages, messages/s and running total per actor path, counted at the tap (not from the dropping channel) — every message counted under load (`ThroughputTests`). | ✅ |
 | `InvokeAsync` | Returns synthetic "use the streaming method" guidance — Akka.NET doesn't have a unary-RPC concept that maps to the workbench's invoke pane. | ✅ |
 | `OpenChannelAsync` | Returns `null` — no duplex-channel semantics for actor messages. | ✅ |
 

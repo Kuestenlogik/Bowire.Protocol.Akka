@@ -16,4 +16,8 @@
     <PackageReference Include="Akka" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Kuestenlogik.Bowire.Protocol.Akka.Tests" />
+  </ItemGroup>
+
 </Project>
