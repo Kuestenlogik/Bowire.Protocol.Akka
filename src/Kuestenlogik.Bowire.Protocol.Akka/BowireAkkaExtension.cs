@@ -42,7 +42,7 @@ public sealed class BowireAkkaExtension : IExtension
 
     // A reader's channel and what it asked to see (#31). The filter is null
     // for "everything", so the common case costs no call.
-    private sealed record Subscriber(Channel<TappedMessage> Channel, TapFilter? Filter, bool TypedPayload);
+    private sealed record Subscriber(Channel<TappedMessage> Channel, TapFilter? Filter, PayloadFormat Payload);
     private readonly List<ThroughputCounter> _counters = [];
     // Every live tap mailbox by owner path (#28). Filled at actor creation,
     // emptied at actor stop — nothing per message.
@@ -182,20 +182,21 @@ public sealed class BowireAkkaExtension : IExtension
     /// the actor system. Caller disposes by passing the returned token to
     /// <see cref="Unsubscribe"/> once the stream ends.
     /// </summary>
-    public ChannelReader<TappedMessage> Subscribe(out object token) => Subscribe(null, false, out token);
+    public ChannelReader<TappedMessage> Subscribe(out object token) => Subscribe(null, PayloadFormat.None, out token);
 
-    /// <inheritdoc cref="Subscribe(TapFilter?, bool, out object)"/>
-    public ChannelReader<TappedMessage> Subscribe(TapFilter? filter, out object token) => Subscribe(filter, false, out token);
+    /// <inheritdoc cref="Subscribe(TapFilter?, PayloadFormat, out object)"/>
+    public ChannelReader<TappedMessage> Subscribe(TapFilter? filter, out object token) => Subscribe(filter, PayloadFormat.None, out token);
 
     /// <summary>
     /// Open a fresh reader that only receives what <paramref name="filter"/>
     /// lets through (#31). The filter runs before the channel, so what it
-    /// rejects never takes one of the reader's slots. With
-    /// <paramref name="typedPayload"/> each message also carries
-    /// <see cref="TappedMessage.PayloadJson"/> (#30) — serialized once per
-    /// message however many readers ask, and not at all when none does.
+    /// rejects never takes one of the reader's slots. With a
+    /// <paramref name="payload"/> format other than <see cref="PayloadFormat.None"/>
+    /// each message also carries <see cref="TappedMessage.PayloadJson"/> (#30)
+    /// — rendered once per message and format however many readers ask, and
+    /// not at all when none does.
     /// </summary>
-    public ChannelReader<TappedMessage> Subscribe(TapFilter? filter, bool typedPayload, out object token)
+    public ChannelReader<TappedMessage> Subscribe(TapFilter? filter, PayloadFormat payload, out object token)
     {
         var ch = Channel.CreateBounded<TappedMessage>(new BoundedChannelOptions(capacity: 1024)
         {
@@ -203,7 +204,7 @@ public sealed class BowireAkkaExtension : IExtension
             SingleReader = true,
             SingleWriter = false,
         });
-        var subscriber = new Subscriber(ch, filter is { IsEmpty: false } ? filter : null, typedPayload);
+        var subscriber = new Subscriber(ch, filter is { IsEmpty: false } ? filter : null, payload);
         lock (_lock)
         {
             _subscribers.Add(subscriber);
@@ -280,7 +281,8 @@ public sealed class BowireAkkaExtension : IExtension
         {
             counter.Record(msg.Recipient);
         }
-        TappedMessage? typed = null;
+        // One rendering per format per message, made on first demand.
+        TappedMessage?[]? rendered = null;
         foreach (var subscriber in snapshot)
         {
             if (subscriber.Filter is { } filter)
@@ -292,10 +294,12 @@ public sealed class BowireAkkaExtension : IExtension
                 catch (System.Text.RegularExpressions.RegexMatchTimeoutException) { pass = false; }
                 if (!pass) continue;
             }
-            if (subscriber.TypedPayload && original is not null)
+            if (subscriber.Payload != PayloadFormat.None && original is not null)
             {
-                typed ??= msg with { PayloadJson = PayloadRenderer.Render(System, original) };
-                subscriber.Channel.Writer.TryWrite(typed);
+                rendered ??= new TappedMessage?[Enum.GetValues<PayloadFormat>().Length];
+                var slot = (int)subscriber.Payload;
+                rendered[slot] ??= msg with { PayloadJson = PayloadRenderer.Render(System, original, subscriber.Payload) };
+                subscriber.Channel.Writer.TryWrite(rendered[slot]!);
             }
             else
             {

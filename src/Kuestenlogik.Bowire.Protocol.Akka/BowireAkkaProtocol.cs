@@ -93,9 +93,10 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
                 {
                     Description = "Whether dead letters come through (default true).",
                 },
-                new BowireFieldInfo("typedPayload", 4, "bool", "optional", IsMap: false, IsRepeated: false, MessageType: null, EnumValues: null)
+                new BowireFieldInfo("payloadFormat", 4, "enum", "optional", IsMap: false, IsRepeated: false, MessageType: null,
+                    EnumValues: [.. Enum.GetValues<PayloadFormat>().Select(f => new BowireEnumValue(PayloadFormatName(f), (int)f))])
                 {
-                    Description = "Also send each message as structured JSON (PayloadJson), serialized the way the actor system is configured to (default false).",
+                    Description = "Also send each message as a JSON object (PayloadJson): none (default), auto (most readable), properties (public properties), fields (instance fields, private too), akka (what the configured serializer puts on the wire).",
                 },
             ]),
             OutputType: new BowireMessageInfo("TappedMessage", $"{TapServiceName}.TappedMessage", []),
@@ -213,7 +214,7 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
             yield break;
         }
 
-        var reader = extension.Subscribe(ReadMonitorRequest(jsonMessages), ReadTypedPayload(jsonMessages), out var token);
+        var reader = extension.Subscribe(ReadMonitorRequest(jsonMessages), ReadPayloadFormat(jsonMessages), out var token);
         try
         {
             await foreach (var tap in reader.ReadAllAsync(ct).ConfigureAwait(false))
@@ -262,21 +263,41 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
         }
     }
 
-    /// <summary>Whether a MonitorMessages request asks for structured payloads (#30).</summary>
-    internal static bool ReadTypedPayload(List<string> jsonMessages)
+    /// <summary>The name a payload format goes by in a request.</summary>
+    internal static string PayloadFormatName(PayloadFormat format) => format switch
+    {
+        PayloadFormat.Auto => "auto",
+        PayloadFormat.Properties => "properties",
+        PayloadFormat.Fields => "fields",
+        PayloadFormat.Akka => "akka",
+        _ => "none",
+    };
+
+    /// <summary>
+    /// The structured payload a MonitorMessages request asks for (#30), by
+    /// name or number; anything not understood means none.
+    /// </summary>
+    internal static PayloadFormat ReadPayloadFormat(List<string> jsonMessages)
     {
         var body = jsonMessages is { Count: > 0 } ? jsonMessages[0] : null;
-        if (string.IsNullOrWhiteSpace(body)) return false;
+        if (string.IsNullOrWhiteSpace(body)) return PayloadFormat.None;
         try
         {
             using var doc = JsonDocument.Parse(body);
-            return doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("typedPayload", out var t)
-                && t.ValueKind == JsonValueKind.True;
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty("payloadFormat", out var f)) return PayloadFormat.None;
+            if (f.ValueKind == JsonValueKind.String
+                && Enum.TryParse<PayloadFormat>(f.GetString(), ignoreCase: true, out var named)
+                && Enum.IsDefined(named)
+                && !int.TryParse(f.GetString(), out _))
+                return named;
+            if (f.ValueKind == JsonValueKind.Number && f.TryGetInt32(out var n) && Enum.IsDefined((PayloadFormat)n))
+                return (PayloadFormat)n;
+            return PayloadFormat.None;
         }
         catch (JsonException)
         {
-            return false;
+            return PayloadFormat.None;
         }
     }
 

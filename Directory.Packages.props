@@ -19,6 +19,8 @@
          the xunit-specific TestKit base class (Akka.TestKit.Xunit3
          doesn't exist; xunit2 base would conflict with xunit.v3). -->
     <PackageVersion Include="Akka.TestKit" Version="1.5.71" />
+    <!-- Tests only: a protobuf message for the tap's payload rendering (#30); the plugin finds protobuf by reflection. -->
+    <PackageVersion Include="Google.Protobuf" Version="3.36.2" />
     <!-- XPlat coverage collector — drives the dotnet test coverage
          collection flag and drops one cobertura.xml per test project
          for CI / Codecov upload. -->

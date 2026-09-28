@@ -11,6 +11,7 @@
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Akka" />
     <PackageReference Include="Akka.TestKit" />
+    <PackageReference Include="Google.Protobuf" />
     <PackageReference Include="Kuestenlogik.Bowire" />
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
   </ItemGroup>

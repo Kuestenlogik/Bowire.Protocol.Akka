@@ -136,11 +136,19 @@ Each observation is a `TappedMessage`, serialized to JSON:
 }
 ```
 
-`Payload` is the message's `ToString()` — always there, whatever the message is. For its fields, ask for `{ "typedPayload": true }` in the `MonitorMessages` request (it combines with the filter): each message then also carries `PayloadJson`, the message as a JSON object.
+`Payload` is the message's `ToString()` — always there, whatever the message is. For its fields, pick a `payloadFormat` in the `MonitorMessages` request (the workbench offers it as a drop-down; it combines with the filter). Each message then also carries `PayloadJson`, the message as a JSON object:
 
-`PayloadJson` comes from, in this order: a serializer the actor system binds to the type on purpose, if its output is JSON (the application's own format for it); otherwise System.Text.Json over the public properties; and if that cannot handle the type, Akka's default JSON serializer. That last one is not the first choice because its JSON is a type-preserving wire format — a number arrives as `{"$": "I17"}`. A message that will not serialize, or whose JSON is above 256 KB, has `PayloadJson: null` and is delivered as usual.
+| `payloadFormat` | `PayloadJson` |
+|---|---|
+| `none` (default) | not sent |
+| `auto` | the most readable rendering that works: a JSON serializer the actor system binds to the type on purpose; protobuf's own JSON mapping for a protobuf message (found by reflection — the plugin has no protobuf dependency); the public properties; the instance fields when the properties show nothing; Akka's default JSON as the last resort |
+| `properties` | the public properties |
+| `fields` | the instance fields, public and private, read by reflection — the object's actual state, also for a class that exposes none of it (auto-property backing fields under the property's name; cycles and depth are cut off) |
+| `akka` | what the configured serializer would put on the wire: its JSON as is — for Akka's default a type-preserving format where `17` is `{"$": "I17"}` — or, for a binary serializer such as protobuf or Hyperion, `{ "serializer": ..., "bytes": ..., "base64": ... }` |
 
-Serializing happens inside the sender's `Tell`, so it only happens while somebody asked for it, and once per message however many readers did.
+The tap sees the message before anything serializes it — inside one process Akka never does — so protobuf or Hyperion bindings need no decoding; they only matter for `akka`, which shows what they would send.
+
+Rendering happens inside the sender's `Tell`, so it only happens while somebody asked for it, and once per message and format however many readers did. A message that will not render in the chosen format, or whose JSON is above 256 KB, has `PayloadJson: null` and is delivered as usual.
 
 ## Sample
 

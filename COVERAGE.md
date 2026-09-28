@@ -30,7 +30,7 @@ Until #33 / #36 the global-default row was ticked while every mailbox test used 
 | `Sender` | `IActorRef.Path` of the sender, as a string; `<deadLetters>` when there is no sender | ✅ |
 | `MessageType` | CLR type name (FQN) of the message | ✅ |
 | `Payload` | the message's `ToString()` — a string, not a JSON object | ✅ |
-| `PayloadJson` | the message as a JSON object, for a subscriber that asked with `typedPayload: true` (#30); null when it will not serialize or is above 256 KB. Serialized once per message, never without a subscriber that asked (`TypedPayloadTests`). | ✅ |
+| `PayloadJson` | the message as a JSON object in the format the subscriber picked — `auto`, `properties`, `fields` (reflection, private fields too) or `akka` (the configured serializer's wire output; base64 for binary ones) (#30); null when it will not render or is above 256 KB. Rendered once per message and format, never without a subscriber that asked; protobuf messages in protobuf's own JSON under `auto` (`TypedPayloadTests`). |
 | `Timestamp` | UTC `DateTime` at enqueue (or when the `DeadLetter` was republished) | ✅ |
 | `IsDeadLetter` | `true` for `EventStream`-republished `DeadLetter`s, else `false` | ✅ |
 
