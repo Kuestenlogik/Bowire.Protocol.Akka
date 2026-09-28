@@ -8,7 +8,8 @@ What this plugin covers from the Akka.NET surface, and what it deliberately does
 |--------|---------|:-:|-------|
 | **Mailbox enqueue** | `BowireTapMailbox` → `BowireTapMessageQueue` | ✅ | Custom `MailboxType` wraps the standard unbounded queue. Every `Enqueue` forwards a `TappedMessage` to the per-`ActorSystem` extension. |
 | **DeadLetters** | `BowireAkkaExtension/DeadLetterListener` | ✅ | Subscribes to the system's `EventStream`, republishes every `Akka.Event.DeadLetter` as a `TappedMessage` with `IsDeadLetter = true`. |
-| Cluster gossip / membership | `Akka.Cluster.Tools.ClusterClient` | ⏳ | Parked on the 1.1.0 plugin roadmap. |
+| **Remote tap** (standalone CLI) | `Kuestenlogik.Bowire.Protocol.Akka.Remote` — relay behind the ClusterClient receptionist | ✅ | Opt-in on the host (`EnableBowireRemoteTap`), read-only; filter and payload rendering in the host; lease + heartbeat so a vanished CLI stops being served (#27, `RemoteTapTests` against a real one-node cluster over loopback). |
+| Cluster gossip / membership | cluster event stream | ⏳ | Not tapped. |
 | Persistence write / recovery events | journal hooks | ⏳ | Same — 1.1.0+. |
 | ActorSystem lifecycle (start, terminate) | `EventStream` `Terminated` | ⏳ | Optional addition once the cluster track lands. |
 

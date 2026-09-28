@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Remote tap for the Bowire Akka.NET plugin: a relay the host opts into, reachable through Akka.Cluster.Tools' ClusterClient, so the standalone bowire CLI can stream a running cluster's taps without being hosted in it. Read-only; off unless the host enables it. A separate package so that embedded-only users do not pull in remoting.</Description>
+    <PackageId>Kuestenlogik.Bowire.Protocol.Akka.Remote</PackageId>
+    <PackageTags>bowire;bowire-plugin;akka;akka-net;akka-cluster;cluster-client;actor-model;streaming;developer-tools</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kuestenlogik.Bowire.Protocol.Akka\Kuestenlogik.Bowire.Protocol.Akka.csproj" />
+    <PackageReference Include="Kuestenlogik.Bowire" />
+    <PackageReference Include="Akka.Cluster.Tools" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Kuestenlogik.Bowire.Protocol.Akka.Remote.Tests" />
+  </ItemGroup>
+
+</Project>

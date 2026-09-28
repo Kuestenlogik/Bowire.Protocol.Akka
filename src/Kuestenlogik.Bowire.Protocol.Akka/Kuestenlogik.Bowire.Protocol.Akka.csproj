@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Kuestenlogik.Bowire.Protocol.Akka.Tests" />
+    <!-- The remote relay reads MonitorMessages requests the same way (#27). -->
+    <InternalsVisibleTo Include="Kuestenlogik.Bowire.Protocol.Akka.Remote" />
   </ItemGroup>
 
 </Project>

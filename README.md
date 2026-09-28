@@ -156,6 +156,31 @@ What the policy decides is all that is decided:
 
 The tells come from an actor created for the channel, so a reply to `Sender` arrives in the channel rather than in dead letters.
 
+## Standalone: attach the bowire CLI to a running cluster
+
+Everything above runs embedded — the workbench inside the host. To watch a cluster from the standalone `bowire` CLI instead, add the separate package **`Kuestenlogik.Bowire.Protocol.Akka.Remote`** (it brings Akka.Cluster.Tools; embedded-only users don't need it).
+
+In the host, which has to run Akka.Cluster, opt in:
+
+```csharp
+using Kuestenlogik.Bowire.Protocol.Akka.Remote;
+
+system.EnableBowireRemoteTap();
+```
+
+That starts a relay at `/user/bowire-tap-relay` and registers it with the ClusterClient receptionist. The CLI, with the same package installed as a plugin, connects to a contact point of the cluster:
+
+```bash
+bowire --url "akka.tcp://Harbor@10.0.0.5:4053?clientHost=10.0.0.9"
+```
+
+and offers `Tap/MonitorMessages` with the same filter and `payloadFormat` as embedded — the filter and the rendering run in the host, so only what was asked for crosses the network. The CLI runs a small actor system of its own that the relay sends back to; `clientHost` is the name it binds and advertises, and it has to be reachable from the cluster (default `localhost`).
+
+- **Read-only.** The remote tap relays taps; it never sends into the cluster. `Tap/Tell` is embedded-only.
+- **Off unless enabled**, and enabling logs a warning.
+- **Message contents cross the network.** Akka remoting is not authenticated unless you configure TLS — enable the relay where the network is trusted, or with remoting secured.
+- **A CLI that goes away stops being served**: it renews its subscription every 10 s and the relay drops one not renewed for 30 s (`bowire.akka.remote-tap { lease = 30s, heartbeat = 10s }` in the host). The relay's heartbeat keeps ClusterClient's response tunnel, which closes after 30 s of silence, open in quiet times.
+
 ## The envelope
 
 Each observation is a `TappedMessage`, serialized to JSON:

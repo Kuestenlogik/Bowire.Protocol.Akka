@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Kuestenlogik.Bowire.Protocol.Akka/Kuestenlogik.Bowire.Protocol.Akka.csproj" />
+    <Project Path="src/Kuestenlogik.Bowire.Protocol.Akka.Remote/Kuestenlogik.Bowire.Protocol.Akka.Remote.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Kuestenlogik.Bowire.Protocol.Akka.Tests/Kuestenlogik.Bowire.Protocol.Akka.Tests.csproj" />
+    <Project Path="tests/Kuestenlogik.Bowire.Protocol.Akka.Remote.Tests/Kuestenlogik.Bowire.Protocol.Akka.Remote.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Kuestenlogik.Bowire.Protocol.Akka.Sample/Kuestenlogik.Bowire.Protocol.Akka.Sample.csproj" />

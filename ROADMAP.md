@@ -9,18 +9,24 @@ Version numbers are the published NuGet package versions of
   of recipient / sender / message type / payload / timestamp.
 - **1.0.1** — `DeadLetters` capture via `EventStream` subscription, with the
   `IsDeadLetter` flag on the envelope.
-- **1.0.2 – 1.0.11** *(current)* — dependency, packaging, and CI maintenance;
-  no protocol changes.
+- **1.0.2 – 1.0.21** *(latest release)* — dependency, packaging, and CI
+  maintenance; no protocol changes.
 
-## Planned
+## Done, not yet released
 
-- **1.1.0** — external `Akka.Cluster.Tools.ClusterClient` transport so the
-  standalone `bowire` CLI can attach to a running cluster, plus
-  mailbox-snapshot inspection (size, head messages) and per-actor throughput
-  stats.
-- **1.2.0** — typed payload via Akka serializer roundtrip, an opt-in filter
-  API from the Bowire UI (per actor path, per message type), and
-  Tell-from-Bowire (interactive duplex).
+- Dead letters also in the global-default mailbox mode, the documented wire
+  keys match the code, tests for every wiring mode (#33, #34, #36).
+- `Tap/Throughput` — messages per second per actor, counted at the tap (#29).
+- `Tap/Mailboxes` — depth and head of each tap mailbox, nothing dequeued (#28).
+- A filter on `Tap/MonitorMessages` per actor path and message type, applied
+  before the stream's buffer (#31).
+- `PayloadJson` in a format the user picks — auto, properties, fields
+  (reflection), or what the configured serializer puts on the wire (#30).
+- `Tap/Tell` — send into the actor system, only what the host allows (#32).
+- `Kuestenlogik.Bowire.Protocol.Akka.Remote` — the standalone `bowire` CLI
+  attaches to a running cluster over ClusterClient (#27).
+
+What was planned for 1.1.0 and 1.2.0 is all in this list.
 
 ---
 
