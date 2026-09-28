@@ -99,7 +99,20 @@ public sealed class MailboxSnapshotTests
         using var _ = system;
         var first = system.ActorOf(Props.Create<SinkActor>().WithMailbox("akka.actor.bowire-tap"), "again");
         await first.GracefulStop(TimeSpan.FromSeconds(3));
-        var second = system.ActorOf(Props.Create<SinkActor>().WithMailbox("akka.actor.bowire-tap"), "again");
+        // The name is free once the parent has processed the stop, which is
+        // after GracefulStop returns — so try until it is.
+        IActorRef? second = null;
+        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+        {
+            while (second is null)
+            {
+                try { second = system.ActorOf(Props.Create<SinkActor>().WithMailbox("akka.actor.bowire-tap"), "again"); }
+                catch (InvalidActorNameException) when (!cts.IsCancellationRequested)
+                {
+                    await Task.Delay(20, TestContext.Current.CancellationToken);
+                }
+            }
+        }
         Assert.Equal(1, await WaitForCount(ext, second.Path.ToString(), 1));
         // And it stays: nothing late takes it out again.
         await Task.Delay(200, TestContext.Current.CancellationToken);
