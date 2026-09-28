@@ -17,7 +17,7 @@ namespace Kuestenlogik.Bowire.Protocol.Akka;
 /// undeliverable messages through the same fan-out.
 /// <para>
 /// Subscribers (the Bowire UI's <see cref="BowireAkkaProtocol.InvokeStreamAsync"/>
-/// implementation) call <see cref="Subscribe"/> to get a fresh
+/// implementation) call <see cref="Subscribe(TapFilter?, out object)"/> to get a fresh
 /// <see cref="ChannelReader{T}"/> that receives every tap from now on.
 /// Multiple subscribers each get their own reader — no fan-out coupling.
 /// </para>
@@ -38,7 +38,11 @@ namespace Kuestenlogik.Bowire.Protocol.Akka;
 public sealed class BowireAkkaExtension : IExtension
 {
     private readonly object _lock = new();
-    private readonly List<Channel<TappedMessage>> _subscribers = [];
+    private readonly List<Subscriber> _subscribers = [];
+
+    // A reader's channel and what it asked to see (#31). The filter is null
+    // for "everything", so the common case costs no call.
+    private sealed record Subscriber(Channel<TappedMessage> Channel, TapFilter? Filter);
     private readonly List<ThroughputCounter> _counters = [];
     // Every live tap mailbox by owner path (#28). Filled at actor creation,
     // emptied at actor stop — nothing per message.
@@ -178,7 +182,14 @@ public sealed class BowireAkkaExtension : IExtension
     /// the actor system. Caller disposes by passing the returned token to
     /// <see cref="Unsubscribe"/> once the stream ends.
     /// </summary>
-    public ChannelReader<TappedMessage> Subscribe(out object token)
+    public ChannelReader<TappedMessage> Subscribe(out object token) => Subscribe(null, out token);
+
+    /// <summary>
+    /// Open a fresh reader that only receives what <paramref name="filter"/>
+    /// lets through (#31). The filter runs before the channel, so what it
+    /// rejects never takes one of the reader's slots.
+    /// </summary>
+    public ChannelReader<TappedMessage> Subscribe(TapFilter? filter, out object token)
     {
         var ch = Channel.CreateBounded<TappedMessage>(new BoundedChannelOptions(capacity: 1024)
         {
@@ -186,12 +197,13 @@ public sealed class BowireAkkaExtension : IExtension
             SingleReader = true,
             SingleWriter = false,
         });
+        var subscriber = new Subscriber(ch, filter is { IsEmpty: false } ? filter : null);
         lock (_lock)
         {
-            _subscribers.Add(ch);
+            _subscribers.Add(subscriber);
         }
         EnsureDeadLetterBridge();
-        token = ch;
+        token = subscriber;
         return ch.Reader;
     }
 
@@ -227,15 +239,15 @@ public sealed class BowireAkkaExtension : IExtension
         }
     }
 
-    /// <summary>Tear-down counterpart to <see cref="Subscribe"/>.</summary>
+    /// <summary>Tear-down counterpart to <see cref="Subscribe(TapFilter?, out object)"/>.</summary>
     public void Unsubscribe(object token)
     {
-        if (token is not Channel<TappedMessage> ch) return;
+        if (token is not Subscriber subscriber) return;
         lock (_lock)
         {
-            _subscribers.Remove(ch);
+            _subscribers.Remove(subscriber);
         }
-        ch.Writer.TryComplete();
+        subscriber.Channel.Writer.TryComplete();
     }
 
     /// <summary>
@@ -246,7 +258,7 @@ public sealed class BowireAkkaExtension : IExtension
     internal void Publish(TappedMessage msg)
     {
         // Snapshot under lock; write outside to keep the hot path short.
-        Channel<TappedMessage>[] snapshot;
+        Subscriber[] snapshot;
         ThroughputCounter[] counters;
         lock (_lock)
         {
@@ -260,9 +272,18 @@ public sealed class BowireAkkaExtension : IExtension
         {
             counter.Record(msg.Recipient);
         }
-        foreach (var ch in snapshot)
+        foreach (var subscriber in snapshot)
         {
-            ch.Writer.TryWrite(msg);
+            if (subscriber.Filter is { } filter)
+            {
+                // A pattern that times out on some odd path is that message
+                // not shown — never the tap throwing into the sender.
+                bool pass;
+                try { pass = filter.Matches(msg); }
+                catch (System.Text.RegularExpressions.RegexMatchTimeoutException) { pass = false; }
+                if (!pass) continue;
+            }
+            subscriber.Channel.Writer.TryWrite(msg);
         }
     }
 

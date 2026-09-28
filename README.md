@@ -78,6 +78,16 @@ Both modes capture dead letters, and they can be combined — an actor that asks
 
 Open the Bowire workbench (`/bowire` in embedded mode, or the `bowire` CLI), pick the **Akka.NET** tab, and stream `Tap/MonitorMessages`. Every message landing in a tapped mailbox — and every dead letter — appears in real time.
 
+To see only part of it, give the request a filter; every field is optional:
+
+```json
+{ "paths": ["/user/dock-*"], "messageTypes": ["PortCall*"], "includeDeadLetters": false }
+```
+
+`*` stands for any run of characters and a pattern matches the whole value. A path pattern matches the full path (`akka://Harbor/user/dock-*`) or the path from `/user` on; a type pattern the full type name or the simple one. Several patterns of one kind are alternatives, and paths and types must both match. A dead letter's recipient is the dead-letter actor, so a path filter lets dead letters through only if it names that path.
+
+The filter runs before your stream's buffer, not after it: under load the buffer drops its oldest entries, and what the filter keeps out never takes a place there. A narrow filter therefore also keeps the messages you asked for from being dropped.
+
 ### Throughput per actor
 
 `Tap/Throughput` sends a snapshot every interval: the actors that received messages in it, busiest first, each with its count, messages per second and a running total since the stream was opened. The request body is optional:

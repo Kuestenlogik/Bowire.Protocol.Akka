@@ -79,7 +79,21 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
             FullName: $"{TapServiceName}/{MonitorMethodName}",
             ClientStreaming: false,
             ServerStreaming: true,
-            InputType: new BowireMessageInfo("Empty", $"{TapServiceName}.Empty", []),
+            InputType: new BowireMessageInfo("MonitorRequest", $"{TapServiceName}.MonitorRequest",
+            [
+                new BowireFieldInfo("paths", 1, "string", "repeated", IsMap: false, IsRepeated: true, MessageType: null, EnumValues: null)
+                {
+                    Description = "Only messages to actors matching one of these; * for any characters, full path or from /user on (e.g. /user/dock-*).",
+                },
+                new BowireFieldInfo("messageTypes", 2, "string", "repeated", IsMap: false, IsRepeated: true, MessageType: null, EnumValues: null)
+                {
+                    Description = "Only messages of a type matching one of these; full or simple type name, * for any characters (e.g. PortCall*).",
+                },
+                new BowireFieldInfo("includeDeadLetters", 3, "bool", "optional", IsMap: false, IsRepeated: false, MessageType: null, EnumValues: null)
+                {
+                    Description = "Whether dead letters come through (default true).",
+                },
+            ]),
             OutputType: new BowireMessageInfo("TappedMessage", $"{TapServiceName}.TappedMessage", []),
             MethodType: "ServerStreaming");
 
@@ -195,7 +209,7 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
             yield break;
         }
 
-        var reader = extension.Subscribe(out var token);
+        var reader = extension.Subscribe(ReadMonitorRequest(jsonMessages), out var token);
         try
         {
             await foreach (var tap in reader.ReadAllAsync(ct).ConfigureAwait(false))
@@ -206,6 +220,41 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
         finally
         {
             extension.Unsubscribe(token);
+        }
+    }
+
+    /// <summary>
+    /// The filter a MonitorMessages request asks for, or null for everything
+    /// (#31). A body that is not a JSON object asks for everything.
+    /// </summary>
+    internal static TapFilter? ReadMonitorRequest(List<string> jsonMessages)
+    {
+        var body = jsonMessages is { Count: > 0 } ? jsonMessages[0] : null;
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+            var includeDead = !(root.TryGetProperty("includeDeadLetters", out var d) && d.ValueKind == JsonValueKind.False);
+            var filter = new TapFilter(Strings(root, "paths"), Strings(root, "messageTypes"), includeDead);
+            return filter.IsEmpty ? null : filter;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        // An array of strings, or a single string for one pattern.
+        static List<string> Strings(JsonElement root, string name)
+        {
+            if (!root.TryGetProperty(name, out var v)) return [];
+            return v.ValueKind switch
+            {
+                JsonValueKind.String => [v.GetString()!],
+                JsonValueKind.Array => [.. v.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!)],
+                _ => [],
+            };
         }
     }
 

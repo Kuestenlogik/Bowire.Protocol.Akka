@@ -40,7 +40,7 @@ The stream serialises this record with `System.Text.Json` defaults, so the keys 
 | Method | Behaviour | Tested |
 |--------|-----------|:-:|
 | `DiscoverAsync` | Returns one synthetic service `Tap` with two server-streaming methods, `MonitorMessages` and `Throughput`. | ✅ |
-| `InvokeStreamAsync` — `MonitorMessages` | Hooks the `BowireAkkaExtension`'s broadcast channel and yields each `TappedMessage` as JSON until cancellation. Multi-subscriber safe. | ✅ |
+| `InvokeStreamAsync` — `MonitorMessages` | Hooks the `BowireAkkaExtension`'s broadcast channel and yields each `TappedMessage` as JSON until cancellation. Multi-subscriber safe. Optional per-subscriber filter by path and message type, applied before the channel (`TapFilterTests`). | ✅ |
 | `InvokeStreamAsync` — `Throughput` | A `ThroughputSnapshot` per interval: messages, messages/s and running total per actor path, counted at the tap (not from the dropping channel) — every message counted under load (`ThroughputTests`). | ✅ |
 | `InvokeAsync` — `Mailboxes` | Depth and the oldest queued messages of each tap mailbox, deepest first, filterable by path prefix; read from a snapshot, nothing dequeued — a released actor still gets every message in order (`MailboxSnapshotTests`). | ✅ |
 | `InvokeAsync` — anything else | Returns synthetic "use the streaming method" guidance. | ✅ |
