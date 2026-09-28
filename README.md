@@ -136,7 +136,11 @@ Each observation is a `TappedMessage`, serialized to JSON:
 }
 ```
 
-`Payload` is a best-effort `ToString()` rendering today; typed serializer round-tripping is on the [roadmap](https://github.com/Kuestenlogik/Bowire.Protocol.Akka/blob/main/ROADMAP.md).
+`Payload` is the message's `ToString()` — always there, whatever the message is. For its fields, ask for `{ "typedPayload": true }` in the `MonitorMessages` request (it combines with the filter): each message then also carries `PayloadJson`, the message as a JSON object.
+
+`PayloadJson` comes from, in this order: a serializer the actor system binds to the type on purpose, if its output is JSON (the application's own format for it); otherwise System.Text.Json over the public properties; and if that cannot handle the type, Akka's default JSON serializer. That last one is not the first choice because its JSON is a type-preserving wire format — a number arrives as `{"$": "I17"}`. A message that will not serialize, or whose JSON is above 256 KB, has `PayloadJson: null` and is delivered as usual.
+
+Serializing happens inside the sender's `Tell`, so it only happens while somebody asked for it, and once per message however many readers did.
 
 ## Sample
 

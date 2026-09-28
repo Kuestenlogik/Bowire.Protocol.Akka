@@ -42,7 +42,7 @@ public sealed class BowireAkkaExtension : IExtension
 
     // A reader's channel and what it asked to see (#31). The filter is null
     // for "everything", so the common case costs no call.
-    private sealed record Subscriber(Channel<TappedMessage> Channel, TapFilter? Filter);
+    private sealed record Subscriber(Channel<TappedMessage> Channel, TapFilter? Filter, bool TypedPayload);
     private readonly List<ThroughputCounter> _counters = [];
     // Every live tap mailbox by owner path (#28). Filled at actor creation,
     // emptied at actor stop — nothing per message.
@@ -182,14 +182,20 @@ public sealed class BowireAkkaExtension : IExtension
     /// the actor system. Caller disposes by passing the returned token to
     /// <see cref="Unsubscribe"/> once the stream ends.
     /// </summary>
-    public ChannelReader<TappedMessage> Subscribe(out object token) => Subscribe(null, out token);
+    public ChannelReader<TappedMessage> Subscribe(out object token) => Subscribe(null, false, out token);
+
+    /// <inheritdoc cref="Subscribe(TapFilter?, bool, out object)"/>
+    public ChannelReader<TappedMessage> Subscribe(TapFilter? filter, out object token) => Subscribe(filter, false, out token);
 
     /// <summary>
     /// Open a fresh reader that only receives what <paramref name="filter"/>
     /// lets through (#31). The filter runs before the channel, so what it
-    /// rejects never takes one of the reader's slots.
+    /// rejects never takes one of the reader's slots. With
+    /// <paramref name="typedPayload"/> each message also carries
+    /// <see cref="TappedMessage.PayloadJson"/> (#30) — serialized once per
+    /// message however many readers ask, and not at all when none does.
     /// </summary>
-    public ChannelReader<TappedMessage> Subscribe(TapFilter? filter, out object token)
+    public ChannelReader<TappedMessage> Subscribe(TapFilter? filter, bool typedPayload, out object token)
     {
         var ch = Channel.CreateBounded<TappedMessage>(new BoundedChannelOptions(capacity: 1024)
         {
@@ -197,7 +203,7 @@ public sealed class BowireAkkaExtension : IExtension
             SingleReader = true,
             SingleWriter = false,
         });
-        var subscriber = new Subscriber(ch, filter is { IsEmpty: false } ? filter : null);
+        var subscriber = new Subscriber(ch, filter is { IsEmpty: false } ? filter : null, typedPayload);
         lock (_lock)
         {
             _subscribers.Add(subscriber);
@@ -255,7 +261,9 @@ public sealed class BowireAkkaExtension : IExtension
     /// tapped message. Fan-out: written to each subscriber's channel
     /// without awaiting (drop-oldest takes care of slow consumers).
     /// </summary>
-    internal void Publish(TappedMessage msg)
+    /// <param name="msg">The observation.</param>
+    /// <param name="original">The message itself, for a reader that wants it structured (#30).</param>
+    internal void Publish(TappedMessage msg, object? original)
     {
         // Snapshot under lock; write outside to keep the hot path short.
         Subscriber[] snapshot;
@@ -272,6 +280,7 @@ public sealed class BowireAkkaExtension : IExtension
         {
             counter.Record(msg.Recipient);
         }
+        TappedMessage? typed = null;
         foreach (var subscriber in snapshot)
         {
             if (subscriber.Filter is { } filter)
@@ -283,7 +292,15 @@ public sealed class BowireAkkaExtension : IExtension
                 catch (System.Text.RegularExpressions.RegexMatchTimeoutException) { pass = false; }
                 if (!pass) continue;
             }
-            subscriber.Channel.Writer.TryWrite(msg);
+            if (subscriber.TypedPayload && original is not null)
+            {
+                typed ??= msg with { PayloadJson = PayloadRenderer.Render(System, original) };
+                subscriber.Channel.Writer.TryWrite(typed);
+            }
+            else
+            {
+                subscriber.Channel.Writer.TryWrite(msg);
+            }
         }
     }
 
@@ -308,7 +325,7 @@ public sealed class BowireAkkaExtension : IExtension
                 MessageType: msg?.GetType().FullName ?? "<null>",
                 Payload: msg?.ToString() ?? string.Empty,
                 Timestamp: DateTime.UtcNow,
-                IsDeadLetter: true));
+                IsDeadLetter: true), msg);
         }
         catch
         {

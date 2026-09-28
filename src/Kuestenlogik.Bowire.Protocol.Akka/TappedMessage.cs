@@ -1,6 +1,7 @@
 // Copyright 2026 Küstenlogik
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Json;
 using Akka.Actor;
 
 namespace Kuestenlogik.Bowire.Protocol.Akka;
@@ -15,9 +16,8 @@ namespace Kuestenlogik.Bowire.Protocol.Akka;
 /// <param name="Sender">Absolute path of the sender, or <c>deadLetters</c>.</param>
 /// <param name="MessageType">CLR type name of the payload (no assembly).</param>
 /// <param name="Payload">
-/// Best-effort string rendering of the message — <see cref="object.ToString"/>
-/// for now; future iterations can pluggably serialize via Akka's serializer
-/// or System.Text.Json for richer inspection.
+/// The message's <see cref="object.ToString"/> — always there, whatever the
+/// message is.
 /// </param>
 /// <param name="Timestamp">UTC timestamp of the enqueue.</param>
 /// <param name="IsDeadLetter">
@@ -27,10 +27,16 @@ namespace Kuestenlogik.Bowire.Protocol.Akka;
 /// undeliverable messages distinctly. Defaults to <c>false</c> for
 /// backwards compatibility.
 /// </param>
+/// <param name="PayloadJson">
+/// The message as structured JSON (#30) — only for a subscriber that asked
+/// for it, and null when the message would not serialize. See
+/// <see cref="PayloadRenderer"/>.
+/// </param>
 public sealed record TappedMessage(
     string Recipient,
     string Sender,
     string MessageType,
     string Payload,
     DateTime Timestamp,
-    bool IsDeadLetter = false);
+    bool IsDeadLetter = false,
+    JsonElement? PayloadJson = null);

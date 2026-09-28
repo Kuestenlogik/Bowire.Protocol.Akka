@@ -112,7 +112,7 @@ internal sealed class BowireTapMessageQueue : IMessageQueue, IUnboundedMessageQu
                     Sender: envelope.Sender?.Path?.ToString() ?? "<deadLetters>",
                     MessageType: msg?.GetType().FullName ?? "<null>",
                     Payload: msg?.ToString() ?? string.Empty,
-                    Timestamp: DateTime.UtcNow));
+                    Timestamp: DateTime.UtcNow), msg);
             }
             catch
             {

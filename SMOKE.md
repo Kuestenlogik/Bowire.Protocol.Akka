@@ -63,7 +63,7 @@ You should see a continuous stream of frames like:
 }
 ```
 
-`Payload` is the message's `ToString()` — a string, not a JSON object. For a C# record that reads like the record's fields; for a class without an override it is just the type name. A typed payload is tracked separately.
+`Payload` is the message's `ToString()` — a string, not a JSON object. For a C# record that reads like the record's fields; for a class without an override it is just the type name. Stream with `{ "typedPayload": true }` to get `PayloadJson` as well — the message as a JSON object, e.g. `{ "ShipId": 17, "TotalDuration": "00:00:04.1230000" }`.
 
 If you stop and immediately restart the streaming method, the new subscription picks up the next-emitted message — the broadcast channel discards messages emitted while no subscriber was attached, so the stream stays bounded.
 

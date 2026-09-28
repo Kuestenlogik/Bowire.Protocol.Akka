@@ -93,6 +93,10 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
                 {
                     Description = "Whether dead letters come through (default true).",
                 },
+                new BowireFieldInfo("typedPayload", 4, "bool", "optional", IsMap: false, IsRepeated: false, MessageType: null, EnumValues: null)
+                {
+                    Description = "Also send each message as structured JSON (PayloadJson), serialized the way the actor system is configured to (default false).",
+                },
             ]),
             OutputType: new BowireMessageInfo("TappedMessage", $"{TapServiceName}.TappedMessage", []),
             MethodType: "ServerStreaming");
@@ -209,7 +213,7 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
             yield break;
         }
 
-        var reader = extension.Subscribe(ReadMonitorRequest(jsonMessages), out var token);
+        var reader = extension.Subscribe(ReadMonitorRequest(jsonMessages), ReadTypedPayload(jsonMessages), out var token);
         try
         {
             await foreach (var tap in reader.ReadAllAsync(ct).ConfigureAwait(false))
@@ -255,6 +259,24 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
                 JsonValueKind.Array => [.. v.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!)],
                 _ => [],
             };
+        }
+    }
+
+    /// <summary>Whether a MonitorMessages request asks for structured payloads (#30).</summary>
+    internal static bool ReadTypedPayload(List<string> jsonMessages)
+    {
+        var body = jsonMessages is { Count: > 0 } ? jsonMessages[0] : null;
+        if (string.IsNullOrWhiteSpace(body)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("typedPayload", out var t)
+                && t.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 

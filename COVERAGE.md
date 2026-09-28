@@ -30,6 +30,7 @@ Until #33 / #36 the global-default row was ticked while every mailbox test used 
 | `Sender` | `IActorRef.Path` of the sender, as a string; `<deadLetters>` when there is no sender | ✅ |
 | `MessageType` | CLR type name (FQN) of the message | ✅ |
 | `Payload` | the message's `ToString()` — a string, not a JSON object | ✅ |
+| `PayloadJson` | the message as a JSON object, for a subscriber that asked with `typedPayload: true` (#30); null when it will not serialize or is above 256 KB. Serialized once per message, never without a subscriber that asked (`TypedPayloadTests`). | ✅ |
 | `Timestamp` | UTC `DateTime` at enqueue (or when the `DeadLetter` was republished) | ✅ |
 | `IsDeadLetter` | `true` for `EventStream`-republished `DeadLetter`s, else `false` | ✅ |
 
