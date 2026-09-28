@@ -13,7 +13,7 @@ Bowire protocol plugin for **[Akka.NET](https://getakka.net/)** actor systems. S
 - **Mailbox tap** — a custom Akka.NET `MailboxType` (`BowireTapMailbox`) wraps the standard unbounded queue and forwards every enqueue to a per-actor-system extension. Opt in globally (default-mailbox swap) or per actor (`Props.WithMailbox(...)`).
 - **DeadLetters capture** — the extension subscribes to the actor system's `EventStream` and republishes every `Akka.Event.DeadLetter` through the same channel with `IsDeadLetter = true`, so undeliverable messages surface without any per-actor opt-in.
 - **`IExtension` integration** — `BowireAkkaExtension` owns the active subscriber list and the dead-letter bridge. When nobody is watching, each enqueue costs a single subscriber-count check; the message is only marshalled once at least one subscriber is attached.
-- **Bowire streaming pane** — `BowireAkkaProtocol` exposes two server-streaming methods: `Tap/MonitorMessages` yields `TappedMessage` envelopes as JSON, `Tap/Throughput` messages per second per actor.
+- **Bowire streaming pane** — `BowireAkkaProtocol` exposes two server-streaming methods — `Tap/MonitorMessages` yields `TappedMessage` envelopes as JSON, `Tap/Throughput` messages per second per actor — and one unary method, `Tap/Mailboxes`, that shows what is waiting in each tapped mailbox.
 
 ## How it works
 
@@ -100,6 +100,16 @@ Open the Bowire workbench (`/bowire` in embedded mode, or the `bowire` CLI), pic
 ```
 
 The counts are taken where the tap sees the message, not from the message stream: that stream drops the oldest entries when its reader falls behind, and a figure read off it would be lowest exactly when an actor is busiest. Dead letters count under the dead-letter path. As with the message stream, nothing is counted while nobody watches.
+
+### What is waiting in a mailbox
+
+`Tap/Mailboxes` (in the invoke pane) lists every tapped mailbox with its depth and the oldest queued messages, deepest first:
+
+```json
+{ "path": "akka://Harbor/user/dock", "head": 5, "nonEmptyOnly": true }
+```
+
+All fields are optional; `head` is clamped to 0–100 (default 5). Nothing is taken off a queue: the head is read from a snapshot, and the actor goes on processing every message in the order it was sent. The view knows a mailbox from the moment the actor is created until it stops — registering it is the only cost, once per actor, none per message.
 
 ## The envelope
 

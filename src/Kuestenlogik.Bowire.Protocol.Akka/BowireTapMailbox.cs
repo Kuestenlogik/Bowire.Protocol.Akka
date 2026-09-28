@@ -1,6 +1,7 @@
 // Copyright 2026 Küstenlogik
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Collections.Concurrent;
 using Akka.Actor;
 using Akka.Configuration;
 using Akka.Dispatch;
@@ -36,13 +37,20 @@ public sealed class BowireTapMailbox : MailboxType, IProducesMessageQueue<Unboun
 }
 
 /// <summary>
-/// Wrapper around <see cref="UnboundedMessageQueue"/> that taps every
-/// enqueue into the system's <see cref="BowireAkkaExtension"/>. The
-/// dequeue path is unmodified — the tap is one-way (mailbox in only).
+/// An unbounded message queue that taps every enqueue into the system's
+/// <see cref="BowireAkkaExtension"/>. The dequeue path is unmodified — the
+/// tap is one-way (mailbox in only).
 /// </summary>
+/// <remarks>
+/// It holds its own <see cref="ConcurrentQueue{T}"/> rather than wrapping
+/// <see cref="UnboundedMessageQueue"/>, because that one keeps its queue
+/// private and the mailbox view (#28) has to look at the head without taking
+/// anything off it. Akka's <see cref="UnboundedMessageQueue"/> is exactly this
+/// queue and these five members, so delivery behaves the same.
+/// </remarks>
 internal sealed class BowireTapMessageQueue : IMessageQueue, IUnboundedMessageQueueSemantics
 {
-    private readonly UnboundedMessageQueue _inner = new();
+    private readonly ConcurrentQueue<Envelope> _queue = new();
     private readonly BowireAkkaExtension? _extension;
     private readonly string _ownerPath;
 
@@ -56,14 +64,38 @@ internal sealed class BowireTapMessageQueue : IMessageQueue, IUnboundedMessageQu
         if (system is ExtendedActorSystem ext)
         {
             _extension = BowireAkkaExtensionProvider.Instance.Apply(ext);
+            // A queue with an owner is a real mailbox; one without is Akka
+            // probing the mailbox type and never holds a message.
+            if (owner is not null) _extension.RegisterMailbox(_ownerPath, this);
         }
     }
 
-    /// <inheritdoc />
-    public bool HasMessages => _inner.HasMessages;
+    /// <summary>Absolute path of the actor this mailbox belongs to.</summary>
+    internal string OwnerPath => _ownerPath;
 
     /// <inheritdoc />
-    public int Count => _inner.Count;
+    public bool HasMessages => !_queue.IsEmpty;
+
+    /// <inheritdoc />
+    public int Count => _queue.Count;
+
+    /// <summary>
+    /// The first <paramref name="count"/> queued envelopes, oldest first,
+    /// without taking them off. Enumerating a <see cref="ConcurrentQueue{T}"/>
+    /// reads a moment-in-time snapshot: the actor goes on dequeuing, and
+    /// nothing it receives is reordered or missed.
+    /// </summary>
+    internal List<Envelope> Peek(int count)
+    {
+        var head = new List<Envelope>(Math.Min(count, 64));
+        if (count <= 0) return head;
+        foreach (var envelope in _queue)
+        {
+            head.Add(envelope);
+            if (head.Count >= count) break;
+        }
+        return head;
+    }
 
     /// <inheritdoc />
     public void Enqueue(IActorRef receiver, Envelope envelope)
@@ -89,12 +121,21 @@ internal sealed class BowireTapMessageQueue : IMessageQueue, IUnboundedMessageQu
                 // the inner queue do its job.
             }
         }
-        _inner.Enqueue(receiver, envelope);
+        _queue.Enqueue(envelope);
     }
 
     /// <inheritdoc />
-    public bool TryDequeue(out Envelope envelope) => _inner.TryDequeue(out envelope);
+    public bool TryDequeue(out Envelope envelope) => _queue.TryDequeue(out envelope);
 
     /// <inheritdoc />
-    public void CleanUp(IActorRef owner, IMessageQueue deadletters) => _inner.CleanUp(owner, deadletters);
+    public void CleanUp(IActorRef owner, IMessageQueue deadletters)
+    {
+        // The actor is gone: its mailbox leaves the view, and whatever was
+        // still queued goes to dead letters, as with Akka's own queue.
+        _extension?.UnregisterMailbox(_ownerPath, this);
+        while (TryDequeue(out var msg))
+        {
+            deadletters.Enqueue(owner, msg);
+        }
+    }
 }

@@ -31,6 +31,12 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
     /// <summary>Method name for the per-actor throughput stream (#29).</summary>
     public const string ThroughputMethodName = "Throughput";
 
+    /// <summary>Method name for the mailbox view (#28).</summary>
+    public const string MailboxesMethodName = "Mailboxes";
+
+    private const int DefaultHead = 5;
+    private const int MaxHead = 100;
+
     private const int DefaultIntervalMs = 1000;
     private const int DefaultTop = 50;
 
@@ -99,10 +105,36 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
             Summary = "Messages per second per actor, counted at the tap.",
         };
 
+        var mailboxes = new BowireMethodInfo(
+            Name: MailboxesMethodName,
+            FullName: $"{TapServiceName}/{MailboxesMethodName}",
+            ClientStreaming: false,
+            ServerStreaming: false,
+            InputType: new BowireMessageInfo("MailboxesRequest", $"{TapServiceName}.MailboxesRequest",
+            [
+                new BowireFieldInfo("path", 1, "string", "optional", IsMap: false, IsRepeated: false, MessageType: null, EnumValues: null)
+                {
+                    Description = "Only actors whose path starts with this, e.g. akka://Harbor/user/dock.",
+                },
+                new BowireFieldInfo("head", 2, "int32", "optional", IsMap: false, IsRepeated: false, MessageType: null, EnumValues: null)
+                {
+                    Description = $"Queued messages to show per mailbox, oldest first (0-{MaxHead}, default {DefaultHead}).",
+                },
+                new BowireFieldInfo("nonEmptyOnly", 3, "bool", "optional", IsMap: false, IsRepeated: false, MessageType: null, EnumValues: null)
+                {
+                    Description = "Leave out mailboxes with nothing queued (default false).",
+                },
+            ]),
+            OutputType: new BowireMessageInfo("MailboxSnapshot", $"{TapServiceName}.MailboxSnapshot", []),
+            MethodType: "Unary")
+        {
+            Summary = "Depth and the next queued messages of each tap mailbox, without taking any off.",
+        };
+
         var service = new BowireServiceInfo(
             Name: TapServiceName,
             Package: Id,
-            Methods: [monitor, throughput]);
+            Methods: [monitor, throughput, mailboxes]);
 
         return Task.FromResult<List<BowireServiceInfo>>([service]);
     }
@@ -113,7 +145,22 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
         List<string> jsonMessages, bool showInternalServices,
         Dictionary<string, string>? metadata = null, CancellationToken ct = default)
     {
-        // The Tap surface is observe-only; there's no unary call to make.
+        if (string.Equals(method, MailboxesMethodName, StringComparison.Ordinal) && _system is ExtendedActorSystem ext)
+        {
+            var (path, head, nonEmptyOnly) = ReadMailboxesRequest(jsonMessages);
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var snapshot = BowireAkkaExtensionProvider.Instance.Apply(ext).SnapshotMailboxes(path, head, nonEmptyOnly);
+            return Task.FromResult(new InvokeResult(
+                Response: JsonSerializer.Serialize(snapshot),
+                DurationMs: watch.ElapsedMilliseconds,
+                Status: "OK",
+                Metadata: new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["mailboxes"] = snapshot.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                }));
+        }
+
+        // The rest of the Tap surface is streaming; there's no unary call to make.
         return Task.FromResult(new InvokeResult(
             Response: """{ "info": "Akka tap is server-streaming only — invoke MonitorMessages via the streaming pane." }""",
             DurationMs: 0,
@@ -160,6 +207,37 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
         {
             extension.Unsubscribe(token);
         }
+    }
+
+    /// <summary>Path prefix, head size and filter from the request body; bad values fall back to the defaults.</summary>
+    internal static (string? Path, int Head, bool NonEmptyOnly) ReadMailboxesRequest(List<string> jsonMessages)
+    {
+        string? path = null;
+        var head = DefaultHead;
+        var nonEmptyOnly = false;
+        var body = jsonMessages is { Count: > 0 } ? jsonMessages[0] : null;
+        if (!string.IsNullOrWhiteSpace(body))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                if (root.ValueKind == JsonValueKind.Object)
+                {
+                    if (root.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(p.GetString()))
+                        path = p.GetString();
+                    if (root.TryGetProperty("head", out var h) && h.TryGetInt32(out var hv))
+                        head = Math.Clamp(hv, 0, MaxHead);
+                    if (root.TryGetProperty("nonEmptyOnly", out var n) && n.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                        nonEmptyOnly = n.GetBoolean();
+                }
+            }
+            catch (JsonException)
+            {
+                // A body that is not JSON asks for nothing in particular.
+            }
+        }
+        return (path, head, nonEmptyOnly);
     }
 
     /// <summary>

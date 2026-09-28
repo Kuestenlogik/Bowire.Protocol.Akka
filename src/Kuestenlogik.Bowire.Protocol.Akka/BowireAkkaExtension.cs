@@ -1,6 +1,7 @@
 // Copyright 2026 Küstenlogik
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Akka.Actor;
 using Akka.Event;
@@ -39,6 +40,9 @@ public sealed class BowireAkkaExtension : IExtension
     private readonly object _lock = new();
     private readonly List<Channel<TappedMessage>> _subscribers = [];
     private readonly List<ThroughputCounter> _counters = [];
+    // Every live tap mailbox by owner path (#28). Filled at actor creation,
+    // emptied at actor stop — nothing per message.
+    private readonly ConcurrentDictionary<string, BowireTapMessageQueue> _mailboxes = new(StringComparer.Ordinal);
     // Created on the first Subscribe, not here — see EnsureDeadLetterBridge.
     // Its own lock: creating an actor while holding _lock, which every tapped
     // enqueue takes, is one scheduling decision away from a deadlock in the
@@ -114,6 +118,49 @@ public sealed class BowireAkkaExtension : IExtension
         // what reports them, so it has to exist for a counter as for a reader.
         EnsureDeadLetterBridge();
         return counter;
+    }
+
+    internal void RegisterMailbox(string path, BowireTapMessageQueue queue) => _mailboxes[path] = queue;
+
+    // Only this queue: an actor re-created under the same name has already
+    // put its new mailbox in, and the old one's clean-up must not take it out.
+    internal void UnregisterMailbox(string path, BowireTapMessageQueue queue) =>
+        _mailboxes.TryRemove(new KeyValuePair<string, BowireTapMessageQueue>(path, queue));
+
+    /// <summary>
+    /// The tap mailboxes as they are now: depth and the first
+    /// <paramref name="head"/> queued messages of each, deepest first (#28).
+    /// Nothing is taken off a queue.
+    /// </summary>
+    /// <param name="pathPrefix">Only actors whose path starts with this; null for all.</param>
+    /// <param name="head">How many queued messages to show per mailbox.</param>
+    /// <param name="nonEmptyOnly">Leave out mailboxes with nothing queued.</param>
+    public IReadOnlyList<MailboxSnapshot> SnapshotMailboxes(string? pathPrefix, int head, bool nonEmptyOnly)
+    {
+        var result = new List<MailboxSnapshot>();
+        foreach (var (path, queue) in _mailboxes)
+        {
+            if (pathPrefix is not null && !path.StartsWith(pathPrefix, StringComparison.Ordinal)) continue;
+            var depth = queue.Count;
+            if (nonEmptyOnly && depth == 0) continue;
+            var queued = queue.Peek(head).Select(Describe).ToList();
+            result.Add(new MailboxSnapshot(path, depth, queued));
+        }
+        return [.. result.OrderByDescending(m => m.Depth).ThenBy(m => m.Path, StringComparer.Ordinal)];
+    }
+
+    private static QueuedMessage Describe(Envelope envelope)
+    {
+        var msg = envelope.Message;
+        string payload;
+        // Another actor's message, rendered from this thread: a ToString that
+        // throws shows as its type, it does not fail the whole view.
+        try { payload = msg?.ToString() ?? string.Empty; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { payload = $"<{ex.GetType().Name} in ToString>"; }
+        return new QueuedMessage(
+            MessageType: msg?.GetType().FullName ?? "<null>",
+            Sender: envelope.Sender?.Path?.ToString() ?? "<deadLetters>",
+            Payload: payload);
     }
 
     /// <summary>Tear-down counterpart to <see cref="StartCounting"/>.</summary>
