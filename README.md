@@ -121,6 +121,41 @@ The counts are taken where the tap sees the message, not from the message stream
 
 All fields are optional; `head` is clamped to 0–100 (default 5). Nothing is taken off a queue: the head is read from a snapshot, and the actor goes on processing every message in the order it was sent. The view knows a mailbox from the moment the actor is created until it stops — registering it is the only cost, once per actor, none per message.
 
+### Sending a message (off by default)
+
+`Tap/Tell` sends a message to an actor and shows what it sends back — as a duplex channel, or once from the invoke pane (with `replyTimeoutMs` it waits for the first reply). It exists only when the host allows it; the workbench cannot switch it on. Allow it in code:
+
+```csharp
+BowireAkkaExtensionProvider.Instance.Apply((ExtendedActorSystem)system)
+    .EnableTell(new TellPolicy(
+        paths: ["/user/dock-*"],
+        messageTypes: [typeof(ScheduleArrival), typeof(CloseBerth)]));
+```
+
+or in HOCON:
+
+```hocon
+bowire.akka.tell {
+  paths = ["/user/dock-*"]
+  message-types = ["Harbor.Messages.ScheduleArrival, Harbor"]
+}
+```
+
+A request names a concrete actor, one of the listed types, and the message as JSON:
+
+```json
+{ "path": "/user/dock-1", "messageType": "Harbor.Messages.ScheduleArrival", "message": { "shipId": 101 } }
+```
+
+What the policy decides is all that is decided:
+
+- **Only listed types.** The JSON is deserialized into exactly the type chosen from the list; a `$type` in the body is ignored, so a request cannot name a type the host did not list.
+- **Only concrete, local paths.** An actor selection understands more than a path — `*` sends to every match, `..` climbs to the parent (`/user/dock-1/../admin` would pass a `/user/dock-*` pattern), another address sends over the network. None of that is accepted.
+- **Every tell is logged** in the actor system's own log, with path and type; enabling Tell logs a warning naming what is allowed.
+- `DisableTell()` takes the permission back; an open channel refuses from then on.
+
+The tells come from an actor created for the channel, so a reply to `Sender` arrives in the channel rather than in dead letters.
+
 ## The envelope
 
 Each observation is a `TappedMessage`, serialized to JSON:

@@ -31,6 +31,9 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
     /// <summary>Method name for the per-actor throughput stream (#29).</summary>
     public const string ThroughputMethodName = "Throughput";
 
+    /// <summary>Method name for sending into the actor system (#32) — listed only when the host allows it.</summary>
+    public const string TellMethodName = "Tell";
+
     /// <summary>Method name for the mailbox view (#28).</summary>
     public const string MailboxesMethodName = "Mailboxes";
 
@@ -150,10 +153,17 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
             Summary = "Depth and the next queued messages of each tap mailbox, without taking any off.",
         };
 
+        List<BowireMethodInfo> methods = [monitor, throughput, mailboxes];
+        if (_system is ExtendedActorSystem system
+            && BowireAkkaExtensionProvider.Instance.Apply(system).TellPolicy is { } policy)
+        {
+            methods.Add(TellMethod(policy));
+        }
+
         var service = new BowireServiceInfo(
             Name: TapServiceName,
             Package: Id,
-            Methods: [monitor, throughput, mailboxes]);
+            Methods: methods);
 
         return Task.FromResult<List<BowireServiceInfo>>([service]);
     }
@@ -164,6 +174,9 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
         List<string> jsonMessages, bool showInternalServices,
         Dictionary<string, string>? metadata = null, CancellationToken ct = default)
     {
+        if (string.Equals(method, TellMethodName, StringComparison.Ordinal))
+            return TellOnceAsync(jsonMessages, ct);
+
         if (string.Equals(method, MailboxesMethodName, StringComparison.Ordinal) && _system is ExtendedActorSystem ext)
         {
             var (path, head, nonEmptyOnly) = ReadMailboxesRequest(jsonMessages);
@@ -262,6 +275,98 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
             };
         }
     }
+
+    /// <summary>
+    /// One tell from the invoke pane (#32); with <c>replyTimeoutMs</c> it
+    /// waits for the first reply, as an Ask.
+    /// </summary>
+    private async Task<InvokeResult> TellOnceAsync(List<string> jsonMessages, CancellationToken ct)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var body = jsonMessages is { Count: > 0 } ? jsonMessages[0] : "{}";
+        if (_system is not ExtendedActorSystem ext)
+            return Refused("No actor system is attached.");
+        var extension = BowireAkkaExtensionProvider.Instance.Apply(ext);
+        var (target, refusal) = TellGateway.Resolve(ext, extension.TellPolicy, body);
+        if (target is null) return Refused(refusal!);
+
+        var timeout = 0;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("replyTimeoutMs", out var t) && t.TryGetInt32(out var tv))
+                timeout = Math.Clamp(tv, 0, 30_000);
+        }
+        catch (JsonException) { /* Resolve accepted it; nothing more to read */ }
+
+        extension.AuditTell(target);
+        if (timeout == 0)
+        {
+            target.Selection.Tell(target.Message, ActorRefs.NoSender);
+            return Result(new { sent = true, path = target.Path }, "OK");
+        }
+
+        try
+        {
+            var reply = await target.Selection.Ask<object>(target.Message, TimeSpan.FromMilliseconds(timeout), ct).ConfigureAwait(false);
+            return Result(new
+            {
+                sent = true,
+                path = target.Path,
+                reply = new TellReply(target.Path, reply.GetType().FullName ?? "<null>", reply.ToString() ?? "",
+                    PayloadRenderer.Render(ext, reply, PayloadFormat.Auto), DateTime.UtcNow),
+            }, "OK");
+        }
+        catch (AskTimeoutException)
+        {
+            return Result(new { sent = true, path = target.Path, reply = (object?)null, note = $"No reply within {timeout} ms." }, "OK");
+        }
+
+        InvokeResult Refused(string reason) => Result(new { refused = reason }, "refused");
+
+        InvokeResult Result(object response, string status) => new(
+            Response: JsonSerializer.Serialize(response),
+            DurationMs: watch.ElapsedMilliseconds,
+            Status: status,
+            Metadata: new Dictionary<string, string>(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The Tell method as the host's policy allows it: the message types to
+    /// choose from, the path patterns in the description.
+    /// </summary>
+    private static BowireMethodInfo TellMethod(TellPolicy policy) => new(
+        Name: TellMethodName,
+        FullName: $"{TapServiceName}/{TellMethodName}",
+        ClientStreaming: true,
+        ServerStreaming: true,
+        InputType: new BowireMessageInfo("TellRequest", $"{TapServiceName}.TellRequest",
+        [
+            new BowireFieldInfo("path", 1, "string", "required", IsMap: false, IsRepeated: false, MessageType: null, EnumValues: null)
+            {
+                Required = true,
+                Description = $"A concrete actor path, e.g. /user/dock-1. Allowed: {string.Join(", ", policy.Paths)}.",
+            },
+            new BowireFieldInfo("messageType", 2, "enum", "required", IsMap: false, IsRepeated: false, MessageType: null,
+                EnumValues: [.. policy.MessageTypes.Keys.Order(StringComparer.Ordinal).Select((name, i) => new BowireEnumValue(name, i))])
+            {
+                Required = true,
+                Description = "The message type; the host lists which ones may be sent.",
+            },
+            new BowireFieldInfo("message", 3, "object", "optional", IsMap: false, IsRepeated: false, MessageType: null, EnumValues: null)
+            {
+                Description = "The message as JSON, deserialized into the chosen type.",
+            },
+            new BowireFieldInfo("replyTimeoutMs", 4, "int32", "optional", IsMap: false, IsRepeated: false, MessageType: null, EnumValues: null)
+            {
+                Description = "Invoke pane only: wait this long for a reply (0-30000, default 0 = don't wait).",
+            },
+        ]),
+        OutputType: new BowireMessageInfo("TellReply", $"{TapServiceName}.TellReply", []),
+        MethodType: "Duplex")
+    {
+        Summary = "Send a message to an actor; replies come back here. Allowed actors and types are set by the host.",
+    };
 
     /// <summary>The name a payload format goes by in a request.</summary>
     internal static string PayloadFormatName(PayloadFormat format) => format switch
@@ -410,8 +515,13 @@ public sealed class BowireAkkaProtocol : IBowireProtocol
         bool showInternalServices, Dictionary<string, string>? metadata = null,
         CancellationToken ct = default)
     {
-        // No interactive duplex on the tap surface yet; future work could
-        // expose a "send" channel that does Tell into selected actors (#32).
-        return Task.FromResult<IBowireChannel?>(null);
+        // Only Tell is a channel, and only where the host allows it (#32).
+        if (!string.Equals(method, TellMethodName, StringComparison.Ordinal)
+            || _system is not ExtendedActorSystem ext
+            || BowireAkkaExtensionProvider.Instance.Apply(ext).TellPolicy is null)
+        {
+            return Task.FromResult<IBowireChannel?>(null);
+        }
+        return Task.FromResult<IBowireChannel?>(new BowireTellChannel(ext, BowireAkkaExtensionProvider.Instance.Apply(ext)));
     }
 }

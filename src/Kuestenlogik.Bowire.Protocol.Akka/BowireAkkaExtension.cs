@@ -62,6 +62,7 @@ public sealed class BowireAkkaExtension : IExtension
     {
         System = system;
         _deadLetterPath = system.DeadLetters.Path.ToString();
+        TellPolicy = ReadTellPolicy(system);
 
         // The dead-letter bridge is NOT spawned here (#33). With the tap as
         // the *global* default mailbox this constructor runs while the root
@@ -88,6 +89,69 @@ public sealed class BowireAkkaExtension : IExtension
                 // Best-effort cleanup during shutdown; swallow.
             }
         });
+    }
+
+    /// <summary>
+    /// What the workbench may send into this actor system (#32), or null —
+    /// the default — when it may send nothing.
+    /// </summary>
+    public TellPolicy? TellPolicy { get; private set; }
+
+    /// <summary>
+    /// Let the workbench send the listed message types to the listed actors
+    /// (#32). Off until called; the workbench cannot turn it on.
+    /// </summary>
+    public void EnableTell(TellPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        TellPolicy = policy;
+        System.Log.Warning(
+            "Bowire: the workbench may send {0} to {1}.",
+            string.Join(", ", policy.MessageTypes.Keys), string.Join(", ", policy.Paths));
+    }
+
+    /// <summary>Take the permission back; open Tell channels refuse from now on.</summary>
+    public void DisableTell() => TellPolicy = null;
+
+    internal void AuditTell(TellTarget target) =>
+        // Every tell leaves a line in the system's own log: who asked is the
+        // workbench, what and where is here.
+        System.Log.Info("Bowire: told {0} a {1}", target.Path, target.Message.GetType().FullName);
+
+    /// <summary>
+    /// The policy from <c>bowire.akka.tell { paths = [...], message-types = [...] }</c>,
+    /// or null. A type that does not resolve is logged and left out; a section
+    /// that ends up allowing nothing enables nothing.
+    /// </summary>
+    private static TellPolicy? ReadTellPolicy(ExtendedActorSystem system)
+    {
+        try
+        {
+            var config = system.Settings.Config;
+            if (!config.HasPath("bowire.akka.tell")) return null;
+            var paths = config.GetStringList("bowire.akka.tell.paths") ?? [];
+            var types = new List<Type>();
+            foreach (var name in config.GetStringList("bowire.akka.tell.message-types") ?? [])
+            {
+                var type = Type.GetType(name, throwOnError: false);
+                if (type is null) system.Log.Warning("Bowire: tell message type '{0}' does not resolve and is not allowed.", name);
+                else types.Add(type);
+            }
+            if (paths.Count == 0 || types.Count == 0)
+            {
+                system.Log.Warning("Bowire: bowire.akka.tell allows no path or no type; Tell stays off.");
+                return null;
+            }
+            var policy = new TellPolicy(paths, types);
+            system.Log.Warning("Bowire: the workbench may send {0} to {1}.",
+                string.Join(", ", policy.MessageTypes.Keys), string.Join(", ", policy.Paths));
+            return policy;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            system.Log.Warning("Bowire: bowire.akka.tell could not be read ({0}); Tell stays off.", ex.Message);
+            return null;
+        }
     }
 
     /// <summary>
