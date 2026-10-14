@@ -30,9 +30,12 @@
     <PublishDir>$(ArtifactsPath)publish\$(MSBuildProjectName)\$(Configuration)\</PublishDir>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(IsPackable)' != 'false'">
+  <!-- XML documentation for every project except the test suites; a missing
+       comment on a public member (CS1591) is a build error. Test projects are
+       excluded by name, because IsPackable / IsTestProject are only set in the
+       project file, after this file has been evaluated. -->
+  <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests'))">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsPackable)' != 'false'">
