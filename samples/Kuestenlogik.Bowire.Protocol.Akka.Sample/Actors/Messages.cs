@@ -5,9 +5,9 @@ using Akka.Actor;
 
 namespace Kuestenlogik.Bowire.Protocol.Akka.Sample.Actors;
 
-public sealed record ScheduleArrival(int ShipId, string ShipName);
-public sealed record DockShip(int ShipId, string ShipName);
-public sealed record StartUnload(int ShipId);
-public sealed record UnloadComplete(int ShipId);
-public sealed record PortCallClosed(int ShipId, TimeSpan TotalDuration);
-public sealed record BindDock(IActorRef Dock);
+internal sealed record ScheduleArrival(int ShipId, string ShipName);
+internal sealed record DockShip(int ShipId, string ShipName);
+internal sealed record StartUnload(int ShipId);
+internal sealed record UnloadComplete(int ShipId);
+internal sealed record PortCallClosed(int ShipId, TimeSpan TotalDuration);
+internal sealed record BindDock(IActorRef Dock);

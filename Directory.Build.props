@@ -7,7 +7,17 @@
     <AnalysisLevel>latest-all</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);NU1510;NU1902;NU1903</NoWarn>
+    <!-- NuGet audit: every package in the graph, direct and transitive, with
+         an advisory of any severity (NU1901-NU1904) fails the restore, since
+         TreatWarningsAsErrors turns the warning into an error. No NuGet
+         warning is suppressed here: a vulnerable package is fixed by raising
+         it (Directory.Packages.props), and a pruned or unneeded reference
+         (NU1510) by removing it. Should an advisory ever have no patched
+         version, it goes in as a single <NuGetAuditSuppress> item with the
+         advisory link and the reason, never as a NoWarn. -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
   </PropertyGroup>
 
   <PropertyGroup>

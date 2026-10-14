@@ -1,6 +1,7 @@
 // Copyright 2026 Küstenlogik
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Security.Cryptography;
 using Akka.Actor;
 using Akka.Configuration;
 using Kuestenlogik.Bowire;
@@ -58,10 +59,9 @@ _ = Task.Run(async () =>
         (Id: 102, Name: "Isabella"),
         (Id: 103, Name: "Aurora"),
     };
-    var rng = new Random();
     while (!app.Lifetime.ApplicationStopping.IsCancellationRequested)
     {
-        var ship = ships[rng.Next(ships.Length)];
+        var ship = ships[RandomNumberGenerator.GetInt32(ships.Length)];
         master.Tell(new ScheduleArrival(ship.Id, ship.Name));
         await Task.Delay(2000, app.Lifetime.ApplicationStopping);
     }
