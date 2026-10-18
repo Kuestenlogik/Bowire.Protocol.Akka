@@ -14,7 +14,7 @@
     <PackageVersion Include="Akka.Cluster.Tools" Version="1.5.73" />
 
     <!-- Test-only -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <!-- Akka.TestKit gives us TestProbe + ExpectMsg without needing
          the xunit-specific TestKit base class (Akka.TestKit.Xunit3
