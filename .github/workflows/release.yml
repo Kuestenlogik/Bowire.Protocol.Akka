@@ -12,6 +12,7 @@ env:
 permissions:
   contents: write
   packages: write
+  id-token: write  # Trusted Publishing: OIDC token exchanged for a one-hour nuget.org key
 
 jobs:
   release:
@@ -55,17 +56,22 @@ jobs:
         if: ${{ !contains(github.ref, '-rc') }}
         run: dotnet nuget push "artifacts/packages/*.nupkg" --source "https://nuget.pkg.github.com/Kuestenlogik/index.json" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
 
-      # nuget.org: only on real GA tags (no -rc), and only when the
-      # secret is configured. NUGET_API_KEY needs the
-      # 'Push new packages and package versions' scope with glob 'KL.*'.
+      # nuget.org, through Trusted Publishing (no stored key): the policy on
+      # nuget.org trusts this repository's release.yml. Only GA tags, no `-rc`.
+      # The temporary key lives one hour, so it is fetched right before the push.
+      - name: nuget.org login (OIDC → temporary API key)
+        if: ${{ !contains(github.ref, '-rc') && vars.NUGET_USER != '' }}
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ vars.NUGET_USER }}
+
       - name: Publish to nuget.org
-        if: ${{ !contains(github.ref, '-rc') && env.NUGET_API_KEY != '' }}
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        if: ${{ !contains(github.ref, '-rc') && vars.NUGET_USER != '' }}
         # No separate .snupkg push — Directory.Build.props uses
         # DebugType=embedded so debug info ships inside the .nupkg.
         run: |
-          dotnet nuget push "artifacts/packages/*.nupkg"             --source https://api.nuget.org/v3/index.json             --api-key "$NUGET_API_KEY"             --skip-duplicate
+          dotnet nuget push "artifacts/packages/*.nupkg"             --source https://api.nuget.org/v3/index.json             --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"             --skip-duplicate
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
