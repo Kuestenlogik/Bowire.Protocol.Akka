@@ -59,9 +59,9 @@
          pipeline carries it. Only bump this when the next target
          major/minor changes — per-release patch bumps happen on the
          git tag, not here. -->
-    <Version>1.1.4-dev</Version>
-    <AssemblyVersion>1.1.4</AssemblyVersion>
-    <FileVersion>1.1.4</FileVersion>
+    <Version>1.1.5-dev</Version>
+    <AssemblyVersion>1.1.5</AssemblyVersion>
+    <FileVersion>1.1.5</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('Kuestenlogik.Bowire.Protocol.'))">
